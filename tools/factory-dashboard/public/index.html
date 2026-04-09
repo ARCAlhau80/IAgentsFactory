@@ -7,12 +7,30 @@
   <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+  <div class="page-aura page-aura-left"></div>
+  <div class="page-aura page-aura-right"></div>
   <div class="page-shell">
+    <section class="top-banner">
+      <div class="top-banner-copy">
+        <p class="eyebrow">Factory Control Room</p>
+        <strong>Knowledge-first orchestration for one-person squads and multi-project delivery.</strong>
+      </div>
+      <div class="top-banner-actions">
+        <div id="hero-chips" class="hero-chips"></div>
+        <button id="open-bootstrap-modal" class="primary-button" type="button">Novo Projeto</button>
+      </div>
+    </section>
+
     <header class="hero">
-      <div>
+      <div class="hero-copy">
         <p class="eyebrow">Knowledge Hub</p>
         <h1>IAgentsFactory Dashboard</h1>
         <p class="subtitle">Visao operacional do knowledge.db da Factory com KPIs, distribuicoes, alertas e uso por projeto.</p>
+        <div class="hero-notes">
+          <span class="hero-note">Busca local primeiro</span>
+          <span class="hero-note">SPEC workflow ativo</span>
+          <span class="hero-note">Operacao multiprojeto</span>
+        </div>
       </div>
       <div class="hero-meta">
         <div class="meta-card">
@@ -23,8 +41,17 @@
           <span class="meta-label">Refresh</span>
           <strong id="refresh-interval">-</strong>
         </div>
+        <div class="meta-card accent-card">
+          <span class="meta-label">Modo</span>
+          <strong>Factory Native Dashboard</strong>
+          <small>KPIs, acervo, backlog reutilizavel e trilha de capturas</small>
+        </div>
       </div>
     </header>
+
+    <section id="snapshot-rail" class="snapshot-rail"></section>
+
+    <section id="bootstrap-status" class="bootstrap-status" aria-live="polite"></section>
 
     <section id="filters" class="filters-panel"></section>
 
@@ -101,6 +128,94 @@
       <tbody></tbody>
     </table>
   </template>
+
+  <div id="bootstrap-modal" class="modal-shell hidden" role="dialog" aria-modal="true" aria-labelledby="bootstrap-title">
+    <div class="modal-backdrop" data-close-modal="true"></div>
+    <section class="modal-card">
+      <div class="modal-head">
+        <div>
+          <p class="eyebrow">Bootstrap</p>
+          <h2 id="bootstrap-title">Novo Projeto na Factory</h2>
+        </div>
+        <button id="close-bootstrap-modal" class="icon-button" type="button" aria-label="Fechar">×</button>
+      </div>
+
+      <form id="bootstrap-form" class="bootstrap-form">
+        <div class="form-grid two-columns">
+          <label class="form-field">
+            <span>Modo do projeto</span>
+            <select name="projectMode">
+              <option value="new">Novo</option>
+              <option value="existing">Existente</option>
+            </select>
+          </label>
+          <label class="form-field">
+            <span>Tipo</span>
+            <input name="projectType" value="microservice-api" />
+          </label>
+        </div>
+
+        <div class="form-grid two-columns">
+          <label class="form-field">
+            <span>Nome do produto</span>
+            <input name="projectName" placeholder="CN2XRoutes" required />
+          </label>
+          <label class="form-field">
+            <span>Pasta do projeto</span>
+            <input name="projectPath" placeholder="C:\Users\AR CALHAU\source\repos\CN2XRoutes" required />
+          </label>
+        </div>
+
+        <label class="form-field">
+          <span>Qual problema ele resolve?</span>
+          <textarea name="problemStatement" rows="3" placeholder="API que retorna rotas rodoviarias a partir de parametros JSON." required></textarea>
+        </label>
+
+        <div class="form-grid two-columns">
+          <label class="form-field">
+            <span>Entrada esperada</span>
+            <textarea name="inputDescription" rows="4" placeholder="JSON com origem, destino, carga, restricoes, pedagios, prioridade."></textarea>
+          </label>
+          <label class="form-field">
+            <span>Saida esperada</span>
+            <textarea name="outputDescription" rows="4" placeholder="Rotas possiveis com distancia, tempo, custo e observacoes."></textarea>
+          </label>
+        </div>
+
+        <div class="form-grid two-columns">
+          <label class="form-field">
+            <span>Restricoes</span>
+            <textarea name="constraints" rows="4" placeholder="Simplicidade, observabilidade e reuso multiprojeto."></textarea>
+          </label>
+          <div class="form-stack">
+            <label class="form-field">
+              <span>Preferencia de stack</span>
+              <input name="stackPreference" placeholder="aberto a sugestao" />
+            </label>
+            <label class="form-field">
+              <span>Stack forçada opcional</span>
+              <select name="selectedStack">
+                <option value="">Sugestao automatica</option>
+                <option value="fastapi">FastAPI</option>
+                <option value="spring-boot">Spring Boot</option>
+                <option value="express">Express</option>
+                <option value="aspnet">ASP.NET Core</option>
+              </select>
+            </label>
+            <label class="check-field">
+              <input type="checkbox" name="autoSuggest" checked />
+              <span>Consultar base local e aceitar sugestoes automaticas</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="ghost-button" id="cancel-bootstrap">Cancelar</button>
+          <button type="submit" class="primary-button" id="submit-bootstrap">Criar e Registrar Projeto</button>
+        </div>
+      </form>
+    </section>
+  </div>
 
   <script src="/app.js"></script>
 </body>

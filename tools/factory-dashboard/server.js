@@ -1,6 +1,7 @@
 ﻿const fs = require("fs");
 const http = require("http");
 const path = require("path");
+const { spawn } = require("child_process");
 
 const projectRoot = path.resolve(__dirname, "..", "..");
 const publicDir = path.join(__dirname, "public");
@@ -12,6 +13,115 @@ const Database = require(betterSqlite3Path);
 
 const config = JSON.parse(fs.readFileSync(configPath, "utf8").replace(/^\uFEFF/, ""));
 const port = Number(process.env.IAGENTSFACTORY_DASHBOARD_PORT || process.env.ISGT_FACTORY_DASHBOARD_PORT || config.dashboard.port || 3010);
+const newProjectScriptPath = path.join(projectRoot, "new-project.ps1");
+
+function readJsonBody(request) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    request.on("data", (chunk) => {
+      chunks.push(chunk);
+      const totalSize = chunks.reduce((sum, current) => sum + current.length, 0);
+      if (totalSize > 1024 * 1024) {
+        reject(new Error("Payload muito grande."));
+        request.destroy();
+      }
+    });
+    request.on("end", () => {
+      try {
+        const raw = Buffer.concat(chunks).toString("utf8").trim();
+        resolve(raw ? JSON.parse(raw) : {});
+      } catch (error) {
+        reject(new Error("JSON invalido no corpo da requisicao."));
+      }
+    });
+    request.on("error", reject);
+  });
+}
+
+function normalizeBootstrapField(value, fallback = "") {
+  if (value === null || value === undefined) {
+    return fallback;
+  }
+
+  return String(value).trim() || fallback;
+}
+
+function runBootstrapProject(payload) {
+  return new Promise((resolve, reject) => {
+    if (!fs.existsSync(newProjectScriptPath)) {
+      reject(new Error(`Wizard nao encontrado em ${newProjectScriptPath}`));
+      return;
+    }
+
+    const mode = normalizeBootstrapField(payload.projectMode, "new").toLowerCase() === "existing" ? "existing" : "new";
+    const args = [
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      newProjectScriptPath,
+      "-Auto",
+      "-ProjectMode",
+      mode,
+      "-ProjectName",
+      normalizeBootstrapField(payload.projectName, "NewProject"),
+      "-ProjectPath",
+      normalizeBootstrapField(payload.projectPath, path.join(path.dirname(projectRoot), normalizeBootstrapField(payload.projectName, "NewProject"))),
+      "-ProjectType",
+      normalizeBootstrapField(payload.projectType, "microservice-api"),
+      "-ProblemStatement",
+      normalizeBootstrapField(payload.problemStatement, "Projeto bootstrapado a partir do dashboard da factory."),
+      "-InputDescription",
+      normalizeBootstrapField(payload.inputDescription, "JSON com parametros de entrada."),
+      "-OutputDescription",
+      normalizeBootstrapField(payload.outputDescription, "Resposta JSON com o resultado da operacao."),
+      "-Constraints",
+      normalizeBootstrapField(payload.constraints, "Simplicidade, observabilidade e reuso multiprojeto."),
+      "-StackPreference",
+      normalizeBootstrapField(payload.stackPreference, "aberto a sugestao"),
+    ];
+
+    if (payload.selectedStack) {
+      args.push("-SelectedStack", normalizeBootstrapField(payload.selectedStack));
+    }
+    if (payload.autoSuggest !== false) {
+      args.push("-AutoSuggest");
+    }
+
+    const child = spawn("powershell", args, {
+      cwd: projectRoot,
+      windowsHide: true,
+    });
+
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk.toString("utf8");
+    });
+
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString("utf8");
+    });
+
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code !== 0) {
+        reject(new Error((stderr || stdout || `Falha ao executar bootstrap. Exit code ${code}.`).trim()));
+        return;
+      }
+
+      resolve({
+        ok: true,
+        code,
+        stdout: stdout.trim(),
+        stderr: stderr.trim(),
+        projectPath: normalizeBootstrapField(payload.projectPath, path.join(path.dirname(projectRoot), normalizeBootstrapField(payload.projectName, "NewProject"))),
+        projectName: normalizeBootstrapField(payload.projectName, "NewProject"),
+      });
+    });
+  });
+}
 
 function openDatabase() {
   const database = new Database(factoryDbPath, { readonly: true });
@@ -248,6 +358,20 @@ const server = http.createServer((request, response) => {
       response.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
       response.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
     }
+    return;
+  }
+
+  if (pathname === "/api/projects/bootstrap" && request.method === "POST") {
+    readJsonBody(request)
+      .then((payload) => runBootstrapProject(payload))
+      .then((result) => {
+        response.writeHead(200, { "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" });
+        response.end(JSON.stringify(result));
+      })
+      .catch((error) => {
+        response.writeHead(500, { "Content-Type": "application/json; charset=utf-8" });
+        response.end(JSON.stringify({ ok: false, error: error instanceof Error ? error.message : String(error) }));
+      });
     return;
   }
 

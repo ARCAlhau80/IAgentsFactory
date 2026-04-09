@@ -6,7 +6,180 @@ const dashboardState = {
     language: "",
     domain: "",
   },
+  bootstrapBusy: false,
 };
+
+function serializeForm(form) {
+  const formData = new FormData(form);
+  return {
+    projectMode: formData.get("projectMode") || "new",
+    projectType: formData.get("projectType") || "microservice-api",
+    projectName: formData.get("projectName") || "",
+    projectPath: formData.get("projectPath") || "",
+    problemStatement: formData.get("problemStatement") || "",
+    inputDescription: formData.get("inputDescription") || "",
+    outputDescription: formData.get("outputDescription") || "",
+    constraints: formData.get("constraints") || "",
+    stackPreference: formData.get("stackPreference") || "aberto a sugestao",
+    selectedStack: formData.get("selectedStack") || "",
+    autoSuggest: formData.get("autoSuggest") === "on",
+  };
+}
+
+function setBootstrapBusy(isBusy) {
+  dashboardState.bootstrapBusy = isBusy;
+  const submitButton = document.getElementById("submit-bootstrap");
+  if (submitButton) {
+    submitButton.disabled = isBusy;
+    submitButton.textContent = isBusy ? "Criando projeto..." : "Criar e Registrar Projeto";
+  }
+}
+
+function showBootstrapStatus(message, details = "", isError = false) {
+  const target = document.getElementById("bootstrap-status");
+  const safeMessage = escapeHtml(message);
+  const safeDetails = details ? `<pre>${escapeHtml(details)}</pre>` : "";
+  target.innerHTML = `
+    <article class="bootstrap-status-card">
+      <strong>${isError ? "Falha no bootstrap" : "Bootstrap executado"}</strong>
+      <div>${safeMessage}</div>
+      ${safeDetails}
+    </article>
+  `;
+}
+
+function openBootstrapModal() {
+  document.getElementById("bootstrap-modal").classList.remove("hidden");
+}
+
+function closeBootstrapModal() {
+  document.getElementById("bootstrap-modal").classList.add("hidden");
+}
+
+async function submitBootstrapForm(event) {
+  event.preventDefault();
+  if (dashboardState.bootstrapBusy) {
+    return;
+  }
+
+  const form = event.currentTarget;
+  const payload = serializeForm(form);
+  setBootstrapBusy(true);
+  showBootstrapStatus("Bootstrap em andamento. A factory esta criando o projeto, aplicando o kit e gerando o SPEC inicial.");
+
+  try {
+    const response = await fetch("/api/projects/bootstrap", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+      },
+      body: JSON.stringify(payload),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || "Falha ao executar o bootstrap do projeto.");
+    }
+
+    showBootstrapStatus(`Projeto ${result.projectName} bootstrapado com sucesso em ${result.projectPath}.`, result.stdout || "");
+    closeBootstrapModal();
+    await loadDashboard();
+  } catch (error) {
+    showBootstrapStatus(error.message, "Verifique os campos informados e tente novamente.", true);
+  } finally {
+    setBootstrapBusy(false);
+  }
+}
+
+function initializeBootstrapUi() {
+  const openButton = document.getElementById("open-bootstrap-modal");
+  const closeButton = document.getElementById("close-bootstrap-modal");
+  const cancelButton = document.getElementById("cancel-bootstrap");
+  const modal = document.getElementById("bootstrap-modal");
+  const form = document.getElementById("bootstrap-form");
+  const projectNameInput = form.querySelector('input[name="projectName"]');
+  const projectPathInput = form.querySelector('input[name="projectPath"]');
+  const defaultBasePath = "C:\\Users\\AR CALHAU\\source\\repos\\";
+
+  openButton.addEventListener("click", openBootstrapModal);
+  closeButton.addEventListener("click", closeBootstrapModal);
+  cancelButton.addEventListener("click", closeBootstrapModal);
+  modal.querySelector("[data-close-modal='true']").addEventListener("click", closeBootstrapModal);
+  form.addEventListener("submit", submitBootstrapForm);
+
+  projectNameInput.addEventListener("input", () => {
+    if (!projectPathInput.dataset.touched) {
+      projectPathInput.value = `${defaultBasePath}${projectNameInput.value.trim()}`;
+    }
+  });
+
+  projectPathInput.addEventListener("input", () => {
+    projectPathInput.dataset.touched = "true";
+  });
+}
+
+function buildHeroChips(payload) {
+  const chips = [];
+  const appliedFilters = payload.appliedFilters || dashboardState.filters;
+
+  if (appliedFilters.project) {
+    chips.push(`Projeto: ${escapeHtml(appliedFilters.project)}`);
+  }
+  if (appliedFilters.language) {
+    chips.push(`Linguagem: ${escapeHtml(appliedFilters.language)}`);
+  }
+  if (appliedFilters.domain) {
+    chips.push(`Dominio: ${escapeHtml(appliedFilters.domain)}`);
+  }
+  if (chips.length === 0) {
+    chips.push("Portfolio completo");
+    chips.push("Acervo compartilhado");
+    chips.push("Leitura local-first");
+  }
+
+  document.getElementById("hero-chips").innerHTML = chips
+    .map((chip) => `<span class="hero-chip">${chip}</span>`)
+    .join("");
+}
+
+function renderSnapshotRail(payload) {
+  const target = document.getElementById("snapshot-rail");
+  const summary = payload.summary || {};
+  const dominantDomain = payload.domains?.[0]?.label || "Sem dominio dominante";
+  const dominantAgent = payload.agents?.[0]?.label || "Sem agente dominante";
+  const latestMonth = payload.timeline?.[0]?.label || "Sem historico";
+  const activeProject = payload.appliedFilters?.project || (payload.projects?.[0]?.name ?? "Portfolio completo");
+
+  const items = [
+    {
+      label: "Foco operacional",
+      value: activeProject,
+      detail: summary.projects > 1 ? `${numberFormatter.format(summary.projects)} projetos ativos na carteira da factory.` : "Projeto em destaque no recorte atual."
+    },
+    {
+      label: "Dominio mais forte",
+      value: dominantDomain,
+      detail: "Area onde o acervo tem maior densidade de conhecimento reutilizavel."
+    },
+    {
+      label: "Canal de captura",
+      value: dominantAgent,
+      detail: "Origem predominante do conhecimento consolidado na base."
+    },
+    {
+      label: "Pulso recente",
+      value: latestMonth,
+      detail: `${numberFormatter.format(summary.solutions || 0)} solucoes acumuladas com qualidade media ${Number(summary.avgQuality || 0).toFixed(2)}.`
+    }
+  ];
+
+  target.innerHTML = items.map((item) => `
+    <article class="snapshot-card">
+      <span class="snapshot-label">${item.label}</span>
+      <strong class="snapshot-value">${escapeHtml(item.value)}</strong>
+      <p class="snapshot-detail">${escapeHtml(item.detail)}</p>
+    </article>
+  `).join("");
+}
 
 function escapeHtml(value) {
   return String(value ?? "")
@@ -186,6 +359,8 @@ async function loadDashboard() {
   document.getElementById("generated-at").textContent = new Date(payload.generatedAt).toLocaleString("pt-BR");
   document.getElementById("refresh-interval").textContent = `${Math.round(payload.refreshInterval / 1000)} s`;
 
+  buildHeroChips(payload);
+  renderSnapshotRail(payload);
   renderFilters(payload);
   renderAlerts(payload.alerts);
   renderKpis(payload.summary);
@@ -200,6 +375,7 @@ async function loadDashboard() {
 
 async function main() {
   try {
+    initializeBootstrapUi();
     const refreshInterval = await loadDashboard();
     window.setInterval(() => {
       loadDashboard().catch((error) => console.error(error));
