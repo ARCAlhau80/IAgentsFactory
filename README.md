@@ -4,6 +4,8 @@
 **Origem:** Evolução do ISGT, que permanece como ADK base e referência de templates.  
 **Posicionamento:** `IAgentsFactory` é um produto separado, com identidade própria, voltado para orquestração, captura de conhecimento e execução multi-projeto.
 
+**Novidade:** fluxo nativo de especificacao leve com `constitution -> specify -> plan -> tasks -> analyze`, ligado ao Knowledge Hub e com gate antes de implementacao/captura.
+
 ---
 
 ## 🧠 Como Funciona
@@ -80,6 +82,24 @@
 .\capture-pipeline.ps1 -FromFile .\seed-solutions\lotoscope-analytics-pipeline.solution.md -Project LotoScope
 ```
 
+### 4.1. Fluxo leve de especificacao
+```powershell
+# 1. Ajustar a constituicao do projeto
+.\iagents-factory.ps1 constitution "qualidade, simplicidade e reuso multiprojeto"
+
+# 2. Criar uma feature spec
+.\iagents-factory.ps1 specify "Painel de intake de demandas com classificacao e trilha de aprovacao"
+
+# 3. Gerar plano tecnico
+.\iagents-factory.ps1 plan "PowerShell + Node, SQLite, baixo acoplamento e knowledge-first"
+
+# 4. Gerar tarefas e publicar artefatos no Knowledge Hub apos gate
+.\iagents-factory.ps1 tasks
+
+# 5. Rodar o gate manualmente quando precisar
+.\iagents-factory.ps1 analyze
+```
+
 ### 5. Métricas
 ```powershell
 .\iagents-factory.ps1 stats
@@ -139,6 +159,11 @@ IAgentsFactory/
 │   ├── code-generation.md, testing.md, refactoring.md, etc.
 │   ├── knowledge-capture.md         ← 5 prompts de knowledge
 │   └── _example-prompt.md
+├── specs/                           ← Workflow leve de constitution/specify/plan/tasks
+│   ├── memory/constitution.md       ← Principios do projeto
+│   ├── templates/                   ← Templates core do workflow
+│   ├── presets/                     ← Overrides de templates
+│   └── extensions/                  ← Regras extras para o gate analyze
 ├── .mcp.json                        ← Integração MCP Graph Workflow
 ├── iagents-factory.ps1              ← CLI principal da Factory
 ├── isgt-factory.ps1                 ← Wrapper de compatibilidade
@@ -171,6 +196,11 @@ IAgentsFactory/
 |---------|-----------|
 | `init` | Inicializa Knowledge Hub (SQLite + FTS5) |
 | `register [path]` | Registra projeto (auto-detecta stack) |
+| `constitution [foco]` | Atualiza a constituicao operacional do projeto |
+| `specify "desc"` | Cria uma spec leve em `specs/NNN-feature/` |
+| `plan [contexto]` | Gera plano tecnico e artefatos auxiliares da feature ativa |
+| `tasks` | Gera checklist de execucao, roda o gate e publica artefatos no Hub |
+| `analyze [feature]` | Valida completude estrutural antes de implementar ou capturar |
 | `capture` | Captura solução interativamente |
 | `search "query"` | Busca full-text no Knowledge Hub e registra reuso do melhor match |
 | `search-cross "query"` | Busca em outros projetos registrados, excluindo o projeto atual quando conhecido |
@@ -187,6 +217,18 @@ IAgentsFactory/
 |---------|-----|-------|
 | `dashboard` | `http://localhost:3010` | Dashboard da Factory, ligado ao Knowledge Hub |
 | `dashboard mcp` | `http://localhost:3000` | Dashboard do MCP Graph, ligado a workflow e backlog |
+
+### Workflow SPEC Leve
+
+O fluxo `SPEC` complementa o knowledge-first da factory com governanca minima e reutilizavel:
+
+1. `constitution` define principios e foco operacional do projeto.
+2. `specify` cria a feature e fixa objetivo, goals e criteria.
+3. `plan` traduz a spec para slices tecnicos e validacao.
+4. `tasks` quebra a entrega em checklist, roda `analyze` e publica `constitution/spec/plan/tasks` no Knowledge Hub.
+5. `analyze` endurece o gate com templates, presets e extensions.
+
+Esse fluxo permite que spec, plan e tasks tambem virem memoria reutilizavel da fabrica, e nao apenas codigo final.
 
 ### Exemplo Real de Fabrica Local
 

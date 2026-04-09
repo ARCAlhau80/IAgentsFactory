@@ -677,7 +677,7 @@ if (-not $isAuto) {
 Write-Host ""
 Write-Host "  Copiando arquivos do template..." -ForegroundColor Green
 
-$folders = @(".github", "docs", "patterns", "skills", "prompts")
+$folders = @(".github", "docs", "patterns", "skills", "prompts", "specs")
 foreach ($folder in $folders) {
     $src = Join-Path $TemplatePath $folder
     $dst = Join-Path $targetDir $folder
@@ -692,7 +692,7 @@ Write-Host ""
 Write-Host "  Substituindo placeholders..." -ForegroundColor Green
 
 $allFiles = Get-ChildItem -Path $targetDir -Include "*.md" -Recurse | 
-    Where-Object { $_.FullName -match '\.github|docs[\\/]|patterns|skills|prompts' }
+    Where-Object { $_.FullName -match '\.github|docs[\\/]|patterns|skills|prompts|specs' }
 
 $replacements = @{
     '\[PROJECT_NAME\]'       = $finalName

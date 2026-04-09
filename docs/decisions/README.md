@@ -24,6 +24,15 @@ Um ADR documenta uma decisão técnica importante, incluindo:
 2. Nomeie como `ADR-[NUMBER]-[titulo-kebab-case].md`
 3. Exemplo: `ADR-001-escolha-do-banco-de-dados.md`
 
+## ADRs Atuais da IAgentsFactory
+
+- `ADR-001-knowledge-hub-architecture.md`
+	Define SQLite + FTS5 + operation local-first como base do Knowledge Hub.
+- `ADR-002-iagentsfactory-repo-split.md`
+	Formaliza a separacao do produto IAgentsFactory em relacao ao ISGT original.
+- `ADR-003-spec-workflow-governance.md`
+	Formaliza o fluxo `constitution -> specify -> plan -> tasks -> analyze` como governanca leve nativa da factory.
+
 ## Template Rápido
 
 ```markdown

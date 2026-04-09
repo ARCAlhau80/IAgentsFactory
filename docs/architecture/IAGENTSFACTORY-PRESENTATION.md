@@ -4,6 +4,8 @@
 
 **Data:** 2026-04-06 | **Autor:** AR CALHAU | **Status:** ✅ Aprovado
 
+**Atualização 2026-04-09:** a apresentação passa a incluir o workflow `SPEC` leve como camada de governança operacional da fábrica.
+
 ---
 
 ## 📌 Slide 1 — O Problema
@@ -148,6 +150,34 @@
 ║                                                          ║
 ║   📊 Resultado: fábrica fica mais inteligente           ║
 ║      com cada interação                                  ║
+╚══════════════════════════════════════════════════════════╝
+```
+
+---
+
+## 📌 Slide 5.1 — Fluxo SPEC Leve
+
+```
+╔══════════════════════════════════════════════════════════╗
+║           GOVERNANÇA LEVE ANTES DA IMPLEMENTAÇÃO        ║
+║                                                          ║
+║   ① constitution                                         ║
+║      define princípios e foco atual                      ║
+║                                                          ║
+║   ② specify                                              ║
+║      cria spec funcional da feature                      ║
+║                                                          ║
+║   ③ plan                                                 ║
+║      traduz escopo em contexto técnico e slices          ║
+║                                                          ║
+║   ④ tasks                                                ║
+║      gera checklist e dispara o gate                     ║
+║                                                          ║
+║   ⑤ analyze                                              ║
+║      valida completude e libera publicação no Hub        ║
+║                                                          ║
+║   📚 Resultado: spec, plan e tasks também viram memória  ║
+║      reutilizável da factory                             ║
 ╚══════════════════════════════════════════════════════════╝
 ```
 

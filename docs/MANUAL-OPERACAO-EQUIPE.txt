@@ -25,6 +25,7 @@ Inicio do dia:
 
 Durante o trabalho:
   - buscar antes de perguntar
+  - abrir spec/plan/tasks para features novas ou ambiguas
   - capturar toda solucao realmente reutilizavel
   - classificar corretamente domain, pattern, language e tags
 
@@ -78,6 +79,17 @@ Exemplo bom:
 
 4. Medir:
    .\iagents-factory.ps1 stats
+
+
+5.1. Para mudancas novas ou maiores, especificar primeiro:
+  .\iagents-factory.ps1 constitution "foco atual"
+  .\iagents-factory.ps1 specify "objetivo da feature"
+  .\iagents-factory.ps1 plan "stack e restricoes"
+  .\iagents-factory.ps1 tasks
+
+5.2. Se o gate reprovar:
+  .\iagents-factory.ps1 analyze
+  ajustar `specs/` antes de implementar ou capturar
 
 
 6. FLUXO DE MULTIPLOS PROJETOS
@@ -153,6 +165,13 @@ Buscar cross-project:
 
 Capturar interativo:
   .\iagents-factory.ps1 capture
+
+Workflow SPEC:
+  .\iagents-factory.ps1 constitution "foco atual"
+  .\iagents-factory.ps1 specify "descricao da feature"
+  .\iagents-factory.ps1 plan "contexto tecnico"
+  .\iagents-factory.ps1 tasks
+  .\iagents-factory.ps1 analyze
 
 Capturar por arquivo:
   .\capture-pipeline.ps1 -FromFile arquivo.solution.md -Project Projeto

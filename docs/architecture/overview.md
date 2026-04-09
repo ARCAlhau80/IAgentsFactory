@@ -1,49 +1,50 @@
-# 🏗️ Architecture Overview — [PROJECT_NAME]
+# 🏗️ Architecture Overview — IAgentsFactory
 
-**Propósito:** Entendimento profundo da arquitetura atual e futura  
-**Nível:** Técnico — Arquitetos & Desenvolvedores Sênior
+**Propósito:** visão técnica consolidada do produto e do fluxo de especificação leve  
+**Nível:** Técnico — Arquitetos, mantenedores e agentes de automação
 
 ---
 
 ## 🎯 O Problema Que Resolvemos
 
-<!-- Descreva em 3-5 linhas o que o sistema faz e por que existe -->
-
 ```
-ENTRADA:   [O que o sistema recebe?]
-DESAFIO:   [Qual a complexidade principal?]
-PROBLEMA:  [Qual restrição ou limitação precisa resolver?]
-RESULTADO: [O que o sistema entrega?]
-ESCALA:    [Volume de dados / concorrência / usuários]
+ENTRADA:   demandas de código, arquitetura, operação e reuso entre projetos
+DESAFIO:   evitar retrabalho, baixa rastreabilidade e dependência total de agentes externos
+PROBLEMA:  conhecimento valioso se perde entre sessões e entre repositórios
+RESULTADO: knowledge hub local + workflow SPEC leve + operação multiprojeto
+ESCALA:    uso local-first, vários repositórios, múltiplos agentes e backlog incremental
 ```
 
 ---
 
 ## 🏛️ Camadas Arquiteturais
 
-<!-- Adapte para a arquitetura do seu projeto -->
-
 ```
 ┌──────────────────────────────────────────────────────┐
 │  PRESENTATION LAYER                                  │
-│  ├─ [API REST / CLI / Web / Mobile]                  │
-│  └─ Responsabilidade: receber input, retornar output │
+│  ├─ PowerShell CLI (`iagents-factory.ps1`)           │
+│  ├─ Dashboard Node/HTTP (`tools/factory-dashboard`)  │
+│  └─ Responsabilidade: comandos, visualização e setup │
 ├──────────────────────────────────────────────────────┤
-│  APPLICATION / ORCHESTRATION LAYER                   │
-│  ├─ [Services, Use Cases, Handlers]                  │
-│  └─ Responsabilidade: orquestrar fluxo               │
+│  ORCHESTRATION LAYER                                 │
+│  ├─ register / search / capture / export / import    │
+│  ├─ constitution / specify / plan / tasks / analyze  │
+│  └─ Responsabilidade: coordenar fluxo knowledge-first│
 ├──────────────────────────────────────────────────────┤
-│  DOMAIN / BUSINESS LOGIC LAYER                       │
-│  ├─ [Entities, Value Objects, Domain Services]       │
-│  └─ Responsabilidade: regras de negócio              │
+│  GOVERNANCE LAYER                                    │
+│  ├─ specs/memory, templates, presets, extensions     │
+│  ├─ gate `analyze`                                   │
+│  └─ Responsabilidade: reduzir ambiguidade e validar  │
 ├──────────────────────────────────────────────────────┤
 │  PERSISTENCE LAYER                                   │
-│  ├─ [Repositories, DAOs, ORMs]                       │
-│  └─ Responsabilidade: acesso a dados                 │
+│  ├─ SQLite (`knowledge.db`) + FTS5                   │
+│  ├─ learned_solutions / factory_projects / reuse_log │
+│  └─ Responsabilidade: armazenar e ranquear memória   │
 ├──────────────────────────────────────────────────────┤
-│  INFRASTRUCTURE LAYER                                │
-│  ├─ [Database, Message Queue, File System, Cache]    │
-│  └─ Responsabilidade: recursos externos              │
+│  INTEGRATION LAYER                                   │
+│  ├─ MCP Graph Workflow                               │
+│  ├─ OpenClaude / agentes externos                    │
+│  └─ Responsabilidade: extensão visual e providers    │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -51,20 +52,20 @@ ESCALA:    [Volume de dados / concorrência / usuários]
 
 ## 🔀 Fluxo Principal
 
-<!-- Descreva o fluxo mais importante do sistema, passo a passo -->
-
 ```
-1. [Trigger: request HTTP / evento / scheduler / CLI]
+1. Operador ou agente inicia uma demanda
    │
-2. [Presentation: valida input, extrai parâmetros]
+2. Factory executa `search` / `search-cross` antes de gerar algo novo
    │
-3. [Application: orquestra o fluxo, chama domain]
+3. Se a demanda for nova, cria `constitution/specify/plan/tasks`
    │
-4. [Domain: aplica regras de negócio]
+4. `analyze` valida estrutura, seções obrigatórias e placeholders
    │
-5. [Persistence: busca/salva dados]
+5. Com gate aprovado, implementação/captura pode seguir
    │
-6. [Response: retorna resultado formatado]
+6. Artefatos e soluções reutilizáveis são publicados no Knowledge Hub
+   │
+7. Próximos projetos reutilizam spec, plan, tasks e código já aprendido
 ```
 
 ---
@@ -73,54 +74,45 @@ ESCALA:    [Volume de dados / concorrência / usuários]
 
 | Pattern | Onde Usado | Por quê |
 |---------|-----------|---------|
-| [Pattern 1] | [Classe/módulo] | [Justificativa] |
-| [Pattern 2] | [Classe/módulo] | [Justificativa] |
-| [Pattern 3] | [Classe/módulo] | [Justificativa] |
-
-<!-- Exemplos comuns:
-| Strategy | Services de processamento | Múltiplos algoritmos intercambiáveis |
-| Repository | Acesso a dados | Abstrair persistência do domínio |
-| Factory | Criação de objetos complexos | Centralizar lógica de criação |
-| Observer | Eventos | Desacoplar producers de consumers |
-| Template Method | Classes base | Definir esqueleto com passos customizáveis |
--->
+| Repository | acesso SQLite no CLI | isolar consultas e persistência do fluxo operacional |
+| Template Method | `specs/templates/*.md` | padronizar artefatos sem travar customização |
+| Factory | setup e geração de estruturas | criar artefatos e diretórios consistentes |
+| Strategy | presets/extensions | variar templates e gates sem reescrever o core |
 
 ---
 
 ## 🗄️ Modelo de Dados (Simplificado)
 
-<!-- Diagrama ER simplificado ou lista das tabelas principais -->
-
 ```
-┌──────────┐     ┌──────────────┐     ┌────────────┐
-│ [Table1] │────▶│  [Table2]    │────▶│  [Table3]  │
-│ - id     │ 1:N │  - id        │ 1:N │  - id      │
-│ - name   │     │  - table1_id │     │  - table2_id│
-│ - status │     │  - value     │     │  - detail  │
-└──────────┘     └──────────────┘     └────────────┘
+learned_solutions
+  - solução ou artefato reutilizável (inclui workflow-spec/plan/tasks)
+factory_projects
+  - projetos registrados na factory
+learning_sessions
+  - sessões e consumo agregado
+reuse_log
+  - histórico de reuso e economia de tokens
+solutions_fts
+  - índice FTS5 para busca textual
 ```
 
 ---
 
 ## 🔒 Segurança
 
-<!-- Descreva como a segurança é tratada -->
-
-- **Autenticação:** [JWT / Session / OAuth2 / API Key]
-- **Autorização:** [RBAC / ABAC / Manual checks]
-- **Dados sensíveis:** [Criptografia em repouso / trânsito]
-- **Secrets:** [Vault / Env vars / Config files]
+- **Autenticação:** não exposta como plataforma multiusuário; operação local-first.
+- **Autorização:** escopo controlado pelo operador no ambiente local.
+- **Dados sensíveis:** evitar secrets em specs, prompts e capturas.
+- **Secrets:** privilegiar env vars e configs locais, nunca hardcode.
 
 ---
 
 ## ⚡ Performance Considerations
 
-<!-- Liste as decisões de performance do projeto -->
-
-- **Cache:** [Redis / In-memory / None]
-- **Connection Pool:** [HikariCP / pgbouncer / default]
-- **Concurrency:** [ThreadPool / Async / Single-threaded]
-- **Indexing:** [Quais tabelas têm índices críticos]
+- **Busca:** FTS5 local com sanitização por tokens para consultas com hífen e termos compostos.
+- **Persistência:** SQLite em WAL para leitura concorrente e operação simples.
+- **Dashboard:** leitura direta do `knowledge.db`, sem camada extra de API pesada.
+- **Governança:** gate leve para não introduzir burocracia desnecessária.
 
 ---
 
@@ -128,12 +120,11 @@ ESCALA:    [Volume de dados / concorrência / usuários]
 
 | Métrica | Valor |
 |---------|-------|
-| Componentes totais | [XX] classes/módulos |
-| Linhas de código (LOC) | [XX]K |
-| Cobertura de testes | [XX]% |
-| Tempo de build | [XX]s |
-| Tempo médio de request | [XX]ms |
-| Uptime | [XX]% |
+| CLI principal | PowerShell 5.1+ |
+| Dashboard | Node.js HTTP local |
+| Banco | SQLite + FTS5 |
+| Escopo de memória | soluções + specs + planos + tarefas |
+| Operação | local-first, multiprojeto |
 
 ---
 
@@ -142,3 +133,4 @@ ESCALA:    [Volume de dados / concorrência / usuários]
 - [AS-IS.md](../../.github/context/AS-IS.md) — Estado atual
 - [TO-BE.md](../../.github/context/TO-BE.md) — Roadmap futuro
 - [type_matrix.md](../../.github/context/type_matrix.md) — Inventário de componentes
+- [../decisions/ADR-003-spec-workflow-governance.md](../decisions/ADR-003-spec-workflow-governance.md) — Adoção do fluxo SPEC leve

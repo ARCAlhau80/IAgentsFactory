@@ -3,7 +3,7 @@ ONBOARDING RAPIDO - IAGENTSFACTORY EM 5 MINUTOS
 ===============================================================
 
 Objetivo:
-Subir a Factory, registrar um projeto, capturar uma solucao e ver o dashboard.
+Subir a Factory, registrar um projeto, criar uma spec leve, capturar uma solucao e ver o dashboard.
 
 
 PASSO 1 - Build do MCP Graph
@@ -44,6 +44,19 @@ Ou carregar seeds reais da demonstracao multiprojeto:
 
   .\capture-pipeline.ps1 -FromFile .\seed-solutions\todo-kanban-status-api.solution.md -Project ToDo
   .\capture-pipeline.ps1 -FromFile .\seed-solutions\lotoscope-analytics-pipeline.solution.md -Project LotoScope
+
+
+PASSO 4.1 - Criar uma feature via workflow SPEC
+
+  .\iagents-factory.ps1 constitution "qualidade, simplicidade e reuso"
+  .\iagents-factory.ps1 specify "Fluxo de intake e classificacao de demandas"
+  .\iagents-factory.ps1 plan "PowerShell + Node + SQLite, knowledge-first"
+  .\iagents-factory.ps1 tasks
+
+Resultado esperado:
+  - `specs/` passa a conter a feature ativa
+  - `tasks` roda `analyze`
+  - os artefatos da feature podem ser publicados no Knowledge Hub
 
 
 PASSO 5 - Buscar conhecimento
@@ -92,6 +105,9 @@ RESUMO DO QUE CADA UM FAZ
 COMANDOS MINIMOS DO DIA A DIA
 
   .\iagents-factory.ps1 search "assunto"
+  .\iagents-factory.ps1 specify "descricao"
+  .\iagents-factory.ps1 plan "contexto tecnico"
+  .\iagents-factory.ps1 tasks
   .\iagents-factory.ps1 capture
   .\capture-pipeline.ps1 -FromFile arquivo.solution.md -Project MeuProjeto
   .\iagents-factory.ps1 stats

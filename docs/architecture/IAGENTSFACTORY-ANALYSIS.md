@@ -13,6 +13,8 @@ Transformar o **IAgentsFactory** a partir da base conceitual do ISGT (IA Squad G
 
 **Objetivo primário:** Otimizar o uso de agentes externos — não substituí-los, mas garantir que soluções já aprendidas sejam reutilizadas localmente, economizando tokens, tempo e custo.
 
+**Atualização 2026-04-09:** a arquitetura agora inclui um workflow `SPEC` leve nativo da Factory para materializar `constitution/spec/plan/tasks`, validar antes da implementação e publicar esses artefatos também como memória reutilizável.
+
 ---
 
 ## 2. Análise do Estado Atual (AS-IS)

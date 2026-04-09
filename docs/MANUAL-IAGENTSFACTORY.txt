@@ -58,6 +58,9 @@ Resumo simples:
 - Quer salvar, buscar, reutilizar e medir conhecimento?
   Use a Factory.
 
+- Quer padronizar escopo, plano e checklist antes de implementar?
+  Use o fluxo SPEC leve da Factory.
+
 - Quer interface visual, grafo e dashboard web?
   Use o MCP Graph.
 
@@ -134,6 +137,20 @@ PASSO 3 - Registrar o projeto atual
 
 Resultado esperado:
   - projeto IAgentsFactory registrado na fabrica
+
+
+PASSO 4 - Inicializar a governanca leve da feature
+
+  .\iagents-factory.ps1 constitution "qualidade, simplicidade e reuso multiprojeto"
+  .\iagents-factory.ps1 specify "Nome e objetivo da feature"
+  .\iagents-factory.ps1 plan "stack, restricoes e dependencias"
+  .\iagents-factory.ps1 tasks
+
+Resultado esperado:
+  - cria `specs/NNN-feature/`
+  - gera `spec.md`, `plan.md`, `tasks.md` e artefatos auxiliares
+  - roda o gate `analyze`
+  - publica `constitution/spec/plan/tasks` no Knowledge Hub quando aprovado
 
 
 ===============================================================
@@ -255,6 +272,17 @@ Se encontrar algo util:
 Se nao encontrar:
   - pergunte ao agente externo
   - depois capture a resposta na Factory
+
+PASSO 1.5 - Para features novas, especificar antes de implementar
+
+  .\iagents-factory.ps1 specify "objetivo da feature"
+  .\iagents-factory.ps1 plan "contexto tecnico"
+  .\iagents-factory.ps1 tasks
+
+Se o gate reprovar:
+  - corrigir os artefatos em `specs/`
+  - rodar `.\iagents-factory.ps1 analyze`
+  - so depois implementar ou capturar
 
 
 PASSO 2 - Capturar conhecimento novo

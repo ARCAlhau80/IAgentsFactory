@@ -1,0 +1,29 @@
+{
+  "extensions": [
+    {
+      "id": "factory-quality-gate",
+      "enabled": true,
+      "requiredArtifacts": [],
+      "requiredSections": {
+        "spec.md": [
+          "## Overview",
+          "## Goals",
+          "## User Stories",
+          "## Functional Requirements",
+          "## Success Criteria"
+        ],
+        "plan.md": [
+          "## Summary",
+          "## Technical Context",
+          "## Implementation Slices",
+          "## Validation Gate"
+        ],
+        "tasks.md": [
+          "## Phase 1",
+          "## Phase 2",
+          "## Phase 3"
+        ]
+      }
+    }
+  ]
+}

@@ -22,6 +22,7 @@
 3. ✅ Não acoplar soluções a um projeto único; tudo novo deve considerar reuso multiprojeto e multi-processo.
 4. ✅ Não hardcodar credenciais nem depender de caminhos absolutos em lógica nova quando houver alternativa configurável.
 5. ✅ Scripts, funções e nomes técnicos em inglês; explicações e documentação podem permanecer em português.
+6. ✅ Para mudanças novas ou ambíguas, preferir o fluxo `constitution -> specify -> plan -> tasks -> analyze` antes de capturar ou implementar.
 
 ---
 
@@ -66,10 +67,11 @@ IAgentsFactory/
 ├── docs/                      # Arquitetura, ADRs, operação e onboarding
 ├── patterns/                  # Patterns reutilizáveis
 ├── prompts/                   # Prompts operacionais
+├── specs/                     # Workflow SPEC leve, presets e extensions
 ├── skills/                    # Skills técnicas do ADK/factory
 ├── seed-solutions/            # Soluções iniciais para o Knowledge Hub
 ├── tools/                     # Dashboard e utilitários locais
-├── iagents-factory.ps1           # CLI principal da factory
+├── iagents-factory.ps1        # CLI principal da factory
 ├── capture-pipeline.ps1       # Captura e ingestão de soluções
 └── setup-ia-squad.ps1         # Setup legado para aplicação do ADK
 ```

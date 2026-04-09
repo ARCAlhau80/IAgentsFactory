@@ -7,6 +7,11 @@
 # COMANDOS:
 #   .\iagents-factory.ps1 init                    -> Inicializa o Knowledge Hub
 #   .\iagents-factory.ps1 register [path]         -> Registra projeto na fábrica
+#   .\iagents-factory.ps1 constitution            -> Inicializa/atualiza a constituicao do projeto
+#   .\iagents-factory.ps1 specify "desc"         -> Cria uma feature spec leve em specs/
+#   .\iagents-factory.ps1 plan [context]          -> Gera plano tecnico da feature ativa
+#   .\iagents-factory.ps1 tasks                   -> Gera tarefas e publica artefatos no Hub
+#   .\iagents-factory.ps1 analyze                 -> Executa gate de validacao do workflow
 #   .\iagents-factory.ps1 capture                 -> Captura solução interativamente
 #   .\iagents-factory.ps1 search "query"          -> Busca soluções locais
 #   .\iagents-factory.ps1 search-cross "query"    -> Busca cross-project
@@ -24,7 +29,7 @@
 
 param(
     [Parameter(Position=0)]
-    [ValidateSet("init","register","capture","search","search-cross","stats","projects","export","import","cleanup","dashboard","help")]
+    [ValidateSet("init","register","constitution","specify","plan","tasks","analyze","capture","search","search-cross","stats","projects","export","import","cleanup","dashboard","help")]
     [string]$Command = "help",
 
     [Parameter(Position=1)]
@@ -61,6 +66,14 @@ $EXPORT_DIR = Join-Path $FACTORY_DIR "exports"
 $MCP_GRAPH_PATH = "C:\Users\AR CALHAU\source\repos\mcp-graph-workflow"
 $DASHBOARD_CONFIG_PATH = Join-Path $PSScriptRoot "config\dashboard-config.json"
 $FACTORY_DASHBOARD_SERVER = Join-Path $PSScriptRoot "tools\factory-dashboard\server.js"
+$WORKFLOW_DIR = Join-Path $PSScriptRoot "specs"
+$WORKFLOW_TEMPLATE_DIR = Join-Path $WORKFLOW_DIR "templates"
+$WORKFLOW_MEMORY_DIR = Join-Path $WORKFLOW_DIR "memory"
+$WORKFLOW_PRESET_DIR = Join-Path $WORKFLOW_DIR "presets"
+$WORKFLOW_EXTENSION_DIR = Join-Path $WORKFLOW_DIR "extensions"
+$ACTIVE_FEATURE_PATH = Join-Path $WORKFLOW_DIR "active-feature.json"
+$ACTIVE_PRESET_PATH = Join-Path $WORKFLOW_PRESET_DIR "active-preset.json"
+$EXTENSIONS_CONFIG_PATH = Join-Path $WORKFLOW_EXTENSION_DIR "extensions.json"
 
 # --- COLORS --------------------------------------------------
 
@@ -125,6 +138,557 @@ function Save-Config {
     param($Config)
 
     $Config | ConvertTo-Json -Depth 10 | Set-Content $CONFIG_PATH -Encoding UTF8
+}
+
+function Ensure-WorkflowStructure {
+    $dirs = @(
+        $WORKFLOW_DIR,
+        $WORKFLOW_TEMPLATE_DIR,
+        $WORKFLOW_MEMORY_DIR,
+        $WORKFLOW_PRESET_DIR,
+        $WORKFLOW_EXTENSION_DIR
+    )
+
+    foreach ($dir in $dirs) {
+        if (-not (Test-Path $dir)) {
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+        }
+    }
+
+    if (-not (Test-Path $ACTIVE_PRESET_PATH)) {
+        @{ activePreset = '' } | ConvertTo-Json | Set-Content $ACTIVE_PRESET_PATH -Encoding UTF8
+    }
+
+    if (-not (Test-Path $EXTENSIONS_CONFIG_PATH)) {
+        @{ extensions = @() } | ConvertTo-Json -Depth 10 | Set-Content $EXTENSIONS_CONFIG_PATH -Encoding UTF8
+    }
+}
+
+function Get-ProjectNameForWorkflow {
+    $projectContext = Get-CurrentProjectContext
+    if ($projectContext -and -not [string]::IsNullOrWhiteSpace([string]$projectContext.name)) {
+        return [string]$projectContext.name
+    }
+
+    return (Get-Item $PSScriptRoot).Name
+}
+
+function Convert-ToFeatureSlug {
+    param([string]$Text)
+
+    $normalized = $Text.ToLowerInvariant()
+    $normalized = [regex]::Replace($normalized, '[^a-z0-9]+', '-')
+    $normalized = $normalized.Trim('-')
+    if ([string]::IsNullOrWhiteSpace($normalized)) {
+        return 'feature'
+    }
+
+    if ($normalized.Length -gt 48) {
+        $normalized = $normalized.Substring(0, 48).Trim('-')
+    }
+
+    return $normalized
+}
+
+function Get-FeatureDirectories {
+    if (-not (Test-Path $WORKFLOW_DIR)) {
+        return @()
+    }
+
+    return @(Get-ChildItem -Path $WORKFLOW_DIR -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '^\d{3,}-' })
+}
+
+function Get-NextFeatureNumber {
+    $maxNumber = 0
+    foreach ($dir in (Get-FeatureDirectories)) {
+        if ($dir.Name -match '^(\d{3,})-') {
+            $value = [int]$Matches[1]
+            if ($value -gt $maxNumber) {
+                $maxNumber = $value
+            }
+        }
+    }
+
+    return ('{0:D3}' -f ($maxNumber + 1))
+}
+
+function Set-ActiveFeature {
+    param([string]$FeatureDir)
+
+    $payload = @{ activeFeature = (Resolve-Path $FeatureDir).Path }
+    $payload | ConvertTo-Json | Set-Content $ACTIVE_FEATURE_PATH -Encoding UTF8
+}
+
+function Get-FeatureDirectory {
+    param([string]$FeatureSelector)
+
+    Ensure-WorkflowStructure
+
+    if ($FeatureSelector) {
+        if (Test-Path $FeatureSelector) {
+            return (Resolve-Path $FeatureSelector).Path
+        }
+
+        $directPath = Join-Path $WORKFLOW_DIR $FeatureSelector
+        if (Test-Path $directPath) {
+            return (Resolve-Path $directPath).Path
+        }
+
+        $matches = @(Get-FeatureDirectories | Where-Object {
+            $_.Name -eq $FeatureSelector -or $_.Name -like ("$FeatureSelector*")
+        })
+
+        if ($matches.Count -eq 1) {
+            return $matches[0].FullName
+        }
+    }
+
+    if (Test-Path $ACTIVE_FEATURE_PATH) {
+        try {
+            $active = Get-Content $ACTIVE_FEATURE_PATH -Raw -Encoding UTF8 | ConvertFrom-Json
+            if ($active.activeFeature -and (Test-Path $active.activeFeature)) {
+                return (Resolve-Path $active.activeFeature).Path
+            }
+        } catch {
+        }
+    }
+
+    return $null
+}
+
+function Get-ActivePresetId {
+    Ensure-WorkflowStructure
+
+    if (-not (Test-Path $ACTIVE_PRESET_PATH)) {
+        return ''
+    }
+
+    try {
+        $activePreset = Get-Content $ACTIVE_PRESET_PATH -Raw -Encoding UTF8 | ConvertFrom-Json
+        return [string]$activePreset.activePreset
+    } catch {
+        return ''
+    }
+}
+
+function Resolve-WorkflowTemplatePath {
+    param([string]$TemplateName)
+
+    $presetId = Get-ActivePresetId
+    if ($presetId) {
+        $presetTemplate = Join-Path $WORKFLOW_PRESET_DIR (Join-Path $presetId (Join-Path 'templates' $TemplateName))
+        if (Test-Path $presetTemplate) {
+            return $presetTemplate
+        }
+    }
+
+    $defaultTemplate = Join-Path $WORKFLOW_TEMPLATE_DIR $TemplateName
+    if (-not (Test-Path $defaultTemplate)) {
+        throw "Template nao encontrado: $TemplateName"
+    }
+
+    return $defaultTemplate
+}
+
+function Write-FileFromTemplate {
+    param(
+        [string]$TemplateName,
+        [string]$DestinationPath,
+        [hashtable]$Replacements
+    )
+
+    $templatePath = Resolve-WorkflowTemplatePath -TemplateName $TemplateName
+    $content = Get-Content $templatePath -Raw -Encoding UTF8
+    foreach ($key in $Replacements.Keys) {
+        $content = $content.Replace("[$key]", [string]$Replacements[$key])
+    }
+
+    Set-Content -Path $DestinationPath -Value $content -Encoding UTF8
+}
+
+function Get-FeatureTitleFromSpec {
+    param([string]$SpecPath)
+
+    if (-not (Test-Path $SpecPath)) {
+        return ''
+    }
+
+    $firstLine = Get-Content $SpecPath -Encoding UTF8 | Select-Object -First 1
+    if ($firstLine -match '^#\s+(.+)$') {
+        return $Matches[1].Trim()
+    }
+
+    return ''
+}
+
+function Get-FeatureSummaryFromSpec {
+    param([string]$SpecPath)
+
+    if (-not (Test-Path $SpecPath)) {
+        return ''
+    }
+
+    $lines = Get-Content $SpecPath -Encoding UTF8
+    foreach ($line in $lines) {
+        $trimmed = $line.Trim()
+        if (-not $trimmed) { continue }
+        if ($trimmed.StartsWith('#')) { continue }
+        return $trimmed
+    }
+
+    return ''
+}
+
+function Get-WorkflowExtensions {
+    Ensure-WorkflowStructure
+
+    if (-not (Test-Path $EXTENSIONS_CONFIG_PATH)) {
+        return @()
+    }
+
+    try {
+        $extensionsConfig = Get-Content $EXTENSIONS_CONFIG_PATH -Raw -Encoding UTF8 | ConvertFrom-Json
+        if ($extensionsConfig.extensions) {
+            return @($extensionsConfig.extensions | Where-Object { $_.enabled -ne $false })
+        }
+    } catch {
+        Write-Warn 'Nao foi possivel ler specs/extensions/extensions.json. Seguindo com regras padrao.'
+    }
+
+    return @()
+}
+
+function Test-PlaceholderContent {
+    param([string]$Content)
+
+    return [regex]::IsMatch($Content, '\[[A-Z][A-Z0-9_ -]{2,}\]')
+}
+
+function Save-KnowledgeArtifact {
+    param(
+        [string]$ArtifactPath,
+        [string]$PatternName,
+        [string]$Summary,
+        [string[]]$ArtifactTags
+    )
+
+    if (-not (Test-Path $ArtifactPath)) {
+        return
+    }
+
+    if (-not (Test-Path $DB_PATH)) {
+        Write-Warn 'Knowledge Hub nao inicializado. Execute .\iagents-factory.ps1 init antes de publicar artefatos.'
+        return
+    }
+
+    $content = Get-Content -Path $ArtifactPath -Raw -Encoding UTF8
+    $contentHash = Get-SHA256 -Text $content
+    $existing = Invoke-Sql -Query "SELECT id FROM learned_solutions WHERE content_hash = '$contentHash';"
+    if ($existing) {
+        Write-Info ("Artefato ja conhecido no Hub: {0}" -f (Split-Path $ArtifactPath -Leaf))
+        return
+    }
+
+    $projectName = Get-ProjectNameForWorkflow
+    $tagsJson = '[' + (($ArtifactTags | ForEach-Object { '"' + ($_ -replace '"', '\\"') + '"' }) -join ',') + ']'
+    $artifactId = New-Id
+    $promptText = "Workflow artifact generated from $(Split-Path $ArtifactPath -Leaf)"
+    $tokensInput = [math]::Ceiling($promptText.Length / 4)
+    $tokensOutput = [math]::Ceiling($content.Length / 4)
+
+    $sql = @"
+INSERT INTO learned_solutions
+    (id, domain, pattern, language, framework, source_project, source_agent,
+     prompt_used, solution_content, solution_summary, content_hash,
+     quality_score, tokens_input, tokens_output, tags)
+VALUES
+    ('$artifactId',
+     'factory-governance',
+     '$(Convert-ToSqlLiteral $PatternName)',
+     'markdown',
+     'spec-workflow',
+     '$(Convert-ToSqlLiteral $projectName)',
+     'iagentsfactory-workflow',
+     '$(Convert-ToSqlLiteral $promptText)',
+     '$(Convert-ToSqlLiteral $content)',
+     '$(Convert-ToSqlLiteral $Summary)',
+     '$contentHash',
+     0.86,
+     $tokensInput,
+     $tokensOutput,
+     '$(Convert-ToSqlLiteral $tagsJson)');
+"@
+
+    Invoke-Sql -Query $sql | Out-Null
+    Write-Ok ("Artefato publicado no Knowledge Hub: {0}" -f (Split-Path $ArtifactPath -Leaf))
+}
+
+function Invoke-AnalyzeFeature {
+    param(
+        [string]$FeatureSelector,
+        [switch]$Quiet
+    )
+
+    Ensure-WorkflowStructure
+
+    $featureDir = Get-FeatureDirectory -FeatureSelector $FeatureSelector
+    if (-not $featureDir) {
+        if (-not $Quiet) {
+            Write-Err 'Nenhuma feature ativa encontrada. Execute primero .\iagents-factory.ps1 specify "descricao".'
+        }
+        return $false
+    }
+
+    $checks = @()
+    $defaultRequiredSections = @{
+        'constitution.md' = @('## Purpose', '## Core Principles', '## Delivery Rules')
+        'spec.md' = @('## Overview', '## Goals', '## User Stories', '## Functional Requirements', '## Success Criteria')
+        'plan.md' = @('## Summary', '## Technical Context', '## Implementation Slices', '## Validation Gate')
+        'tasks.md' = @('## Phase 1', '## Phase 2', '## Phase 3')
+    }
+    $requiredFiles = @(
+        (Join-Path $WORKFLOW_MEMORY_DIR 'constitution.md'),
+        (Join-Path $featureDir 'spec.md'),
+        (Join-Path $featureDir 'plan.md'),
+        (Join-Path $featureDir 'tasks.md')
+    )
+
+    foreach ($extension in (Get-WorkflowExtensions)) {
+        foreach ($artifact in @($extension.requiredArtifacts)) {
+            $candidate = if ([System.IO.Path]::IsPathRooted([string]$artifact)) { [string]$artifact } else { Join-Path $featureDir ([string]$artifact) }
+            if ($requiredFiles -notcontains $candidate) {
+                $requiredFiles += $candidate
+            }
+        }
+
+        if ($extension.requiredSections) {
+            foreach ($property in $extension.requiredSections.PSObject.Properties) {
+                $fileKey = [string]$property.Name
+                $values = @($property.Value)
+                if (-not $defaultRequiredSections.ContainsKey($fileKey)) {
+                    $defaultRequiredSections[$fileKey] = @()
+                }
+                $defaultRequiredSections[$fileKey] += $values
+            }
+        }
+    }
+
+    foreach ($filePath in $requiredFiles) {
+        $leaf = Split-Path $filePath -Leaf
+        if (-not (Test-Path $filePath)) {
+            $checks += [pscustomobject]@{ Status = 'FAIL'; Message = "Arquivo obrigatorio ausente: $leaf" }
+            continue
+        }
+
+        $content = Get-Content $filePath -Raw -Encoding UTF8
+        if (Test-PlaceholderContent -Content $content) {
+            $checks += [pscustomobject]@{ Status = 'FAIL'; Message = "Placeholders ainda presentes em: $leaf" }
+        } else {
+            $checks += [pscustomobject]@{ Status = 'PASS'; Message = "Sem placeholders pendentes em: $leaf" }
+        }
+
+        if ($defaultRequiredSections.ContainsKey($leaf)) {
+            foreach ($section in @($defaultRequiredSections[$leaf] | Select-Object -Unique)) {
+                if ($content -notmatch [regex]::Escape($section)) {
+                    $checks += [pscustomobject]@{ Status = 'FAIL'; Message = "Secao ausente em ${leaf}: $section" }
+                }
+            }
+        }
+
+        if ($leaf -eq 'tasks.md' -and $content -notmatch '\- \[ \] T\d{3}') {
+            $checks += [pscustomobject]@{ Status = 'FAIL'; Message = 'tasks.md nao contem tarefas no formato checklist.' }
+        }
+    }
+
+    $hasFailures = @($checks | Where-Object { $_.Status -eq 'FAIL' }).Count -gt 0
+    if (-not $Quiet) {
+        Write-Title 'Gate de Analise do Workflow'
+        Write-Info ("Feature: {0}" -f (Split-Path $featureDir -Leaf))
+        foreach ($check in $checks) {
+            if ($check.Status -eq 'PASS') {
+                Write-Ok $check.Message
+            } else {
+                Write-Warn $check.Message
+            }
+        }
+
+        if ($hasFailures) {
+            Write-Warn 'Gate reprovado. Corrija os artefatos antes de implementar ou capturar.'
+        } else {
+            Write-Ok 'Gate aprovado. A feature esta pronta para implementacao e publicacao no Hub.'
+        }
+    }
+
+    return (-not $hasFailures)
+}
+
+function Publish-WorkflowArtifacts {
+    param([string]$FeatureDir)
+
+    if (-not (Invoke-AnalyzeFeature -FeatureSelector $FeatureDir -Quiet)) {
+        Write-Warn 'Publicacao no Knowledge Hub cancelada porque o gate de analise falhou.'
+        return
+    }
+
+    $featureName = Split-Path $FeatureDir -Leaf
+    Save-KnowledgeArtifact -ArtifactPath (Join-Path $WORKFLOW_MEMORY_DIR 'constitution.md') -PatternName 'workflow-constitution' -Summary 'Constituicao do projeto com principios e regras de execucao da factory.' -ArtifactTags @('workflow','constitution','governance')
+    Save-KnowledgeArtifact -ArtifactPath (Join-Path $FeatureDir 'spec.md') -PatternName 'workflow-spec' -Summary ("Spec funcional da feature $featureName") -ArtifactTags @('workflow','spec',$featureName)
+    Save-KnowledgeArtifact -ArtifactPath (Join-Path $FeatureDir 'plan.md') -PatternName 'workflow-plan' -Summary ("Plano tecnico da feature $featureName") -ArtifactTags @('workflow','plan',$featureName)
+    Save-KnowledgeArtifact -ArtifactPath (Join-Path $FeatureDir 'tasks.md') -PatternName 'workflow-tasks' -Summary ("Quebra de execucao da feature $featureName") -ArtifactTags @('workflow','tasks',$featureName)
+}
+
+function Invoke-Constitution {
+    Ensure-WorkflowStructure
+
+    $constitutionPath = Join-Path $WORKFLOW_MEMORY_DIR 'constitution.md'
+    if (-not (Test-Path $constitutionPath)) {
+        Write-Err 'Constitution nao encontrada em specs/memory/constitution.md.'
+        return
+    }
+
+    if ($Arg1) {
+        $content = Get-Content $constitutionPath -Raw -Encoding UTF8
+        $focusBlock = "## Current Focus`n`n- $Arg1`n"
+        if ($content -match '(?s)## Current Focus.*?(?=(\r?\n## |\z))') {
+            $content = [regex]::Replace($content, '(?s)## Current Focus.*?(?=(\r?\n## |\z))', $focusBlock)
+        } else {
+            $content = ($content.TrimEnd() + "`n`n" + $focusBlock + "`n")
+        }
+        Set-Content -Path $constitutionPath -Value $content -Encoding UTF8
+        Write-Ok 'Constituicao atualizada com foco atual.'
+    }
+
+    Write-Info ("Constituicao ativa: {0}" -f $constitutionPath)
+}
+
+function Invoke-Specify {
+    param([string]$Description)
+
+    Ensure-WorkflowStructure
+
+    if (-not $Description) {
+        Write-Err 'Uso: .\iagents-factory.ps1 specify "descricao da feature"'
+        return
+    }
+
+    $projectName = Get-ProjectNameForWorkflow
+    $title = (($Description -split '[\.!\?]')[0]).Trim()
+    if (-not $title) {
+        $title = $Description.Trim()
+    }
+
+    $slug = Convert-ToFeatureSlug -Text $title
+    $featureNumber = Get-NextFeatureNumber
+    $featureDir = Join-Path $WORKFLOW_DIR ("{0}-{1}" -f $featureNumber, $slug)
+    $contractsDir = Join-Path $featureDir 'contracts'
+
+    if (Test-Path $featureDir) {
+        Write-Warn "Feature ja existe: $featureDir"
+        Set-ActiveFeature -FeatureDir $featureDir
+        return
+    }
+
+    New-Item -ItemType Directory -Path $featureDir -Force | Out-Null
+    New-Item -ItemType Directory -Path $contractsDir -Force | Out-Null
+
+    $replacements = @{
+        PROJECT_NAME = $projectName
+        FEATURE_TITLE = $title
+        FEATURE_KEY = (Split-Path $featureDir -Leaf)
+        FEATURE_DATE = (Get-Date).ToString('yyyy-MM-dd')
+        FEATURE_DESCRIPTION = $Description.Trim()
+        FEATURE_DIR = (Split-Path $featureDir -Leaf)
+    }
+
+    Write-FileFromTemplate -TemplateName 'spec-template.md' -DestinationPath (Join-Path $featureDir 'spec.md') -Replacements $replacements
+    Set-ActiveFeature -FeatureDir $featureDir
+
+    Write-Title 'Feature especificada'
+    Write-Ok ("Spec criada em: {0}" -f (Join-Path $featureDir 'spec.md'))
+    Write-Info 'Proximo passo: .\iagents-factory.ps1 plan "stack e restricoes tecnicas"'
+}
+
+function Invoke-Plan {
+    param([string]$PlanContext)
+
+    Ensure-WorkflowStructure
+
+    $featureDir = Get-FeatureDirectory -FeatureSelector ''
+    if (-not $featureDir) {
+        Write-Err 'Nenhuma feature ativa encontrada. Execute .\iagents-factory.ps1 specify primeiro.'
+        return
+    }
+
+    $specPath = Join-Path $featureDir 'spec.md'
+    if (-not (Test-Path $specPath)) {
+        Write-Err 'spec.md ausente para a feature ativa.'
+        return
+    }
+
+    $featureTitle = Get-FeatureTitleFromSpec -SpecPath $specPath
+    $featureSummary = Get-FeatureSummaryFromSpec -SpecPath $specPath
+    $planNotes = if ($PlanContext) { $PlanContext } else { 'Manter desenho local-first, knowledge-first, multiprojeto e com baixa complexidade acidental.' }
+    $commonReplacements = @{
+        PROJECT_NAME = (Get-ProjectNameForWorkflow)
+        FEATURE_TITLE = $featureTitle
+        FEATURE_KEY = (Split-Path $featureDir -Leaf)
+        FEATURE_DATE = (Get-Date).ToString('yyyy-MM-dd')
+        FEATURE_DESCRIPTION = $featureSummary
+        TECH_CONTEXT = $planNotes
+    }
+
+    Write-FileFromTemplate -TemplateName 'plan-template.md' -DestinationPath (Join-Path $featureDir 'plan.md') -Replacements $commonReplacements
+    Write-FileFromTemplate -TemplateName 'research-template.md' -DestinationPath (Join-Path $featureDir 'research.md') -Replacements $commonReplacements
+    Write-FileFromTemplate -TemplateName 'data-model-template.md' -DestinationPath (Join-Path $featureDir 'data-model.md') -Replacements $commonReplacements
+    Write-FileFromTemplate -TemplateName 'quickstart-template.md' -DestinationPath (Join-Path $featureDir 'quickstart.md') -Replacements $commonReplacements
+    Write-FileFromTemplate -TemplateName 'contracts-template.md' -DestinationPath (Join-Path (Join-Path $featureDir 'contracts') 'README.md') -Replacements $commonReplacements
+
+    Write-Title 'Plano tecnico gerado'
+    Write-Ok ("Plan criado em: {0}" -f (Join-Path $featureDir 'plan.md'))
+    Write-Info 'Proximo passo: .\iagents-factory.ps1 tasks'
+}
+
+function Invoke-Tasks {
+    Ensure-WorkflowStructure
+
+    $featureDir = Get-FeatureDirectory -FeatureSelector ''
+    if (-not $featureDir) {
+        Write-Err 'Nenhuma feature ativa encontrada. Execute .\iagents-factory.ps1 specify primeiro.'
+        return
+    }
+
+    $specPath = Join-Path $featureDir 'spec.md'
+    $planPath = Join-Path $featureDir 'plan.md'
+    if ((-not (Test-Path $specPath)) -or (-not (Test-Path $planPath))) {
+        Write-Err 'spec.md e plan.md sao obrigatorios antes de gerar tasks.'
+        return
+    }
+
+    $featureTitle = Get-FeatureTitleFromSpec -SpecPath $specPath
+    $featureSummary = Get-FeatureSummaryFromSpec -SpecPath $specPath
+    $replacements = @{
+        PROJECT_NAME = (Get-ProjectNameForWorkflow)
+        FEATURE_TITLE = $featureTitle
+        FEATURE_KEY = (Split-Path $featureDir -Leaf)
+        FEATURE_DATE = (Get-Date).ToString('yyyy-MM-dd')
+        FEATURE_DESCRIPTION = $featureSummary
+    }
+
+    Write-FileFromTemplate -TemplateName 'tasks-template.md' -DestinationPath (Join-Path $featureDir 'tasks.md') -Replacements $replacements
+
+    Write-Title 'Tarefas geradas'
+    Write-Ok ("Tasks criadas em: {0}" -f (Join-Path $featureDir 'tasks.md'))
+
+    if (Invoke-AnalyzeFeature -FeatureSelector $featureDir -Quiet) {
+        Write-Ok 'Gate aprovado. Publicando artefatos do workflow no Knowledge Hub...'
+        Publish-WorkflowArtifacts -FeatureDir $featureDir
+    } else {
+        Write-Warn 'Gate reprovado. Os artefatos nao foram publicados no Knowledge Hub.'
+    }
+}
+
+function Invoke-Analyze {
+    Invoke-AnalyzeFeature -FeatureSelector $Arg1 | Out-Null
 }
 
 function Get-CurrentProjectContext {
@@ -303,6 +867,7 @@ function Invoke-Init {
     Write-Title "Inicializando IAgentsFactory Knowledge Hub..."
     
     New-FactoryDirectory
+    Ensure-WorkflowStructure
     
     # Create SQLite database with schema
     $schema = @"
@@ -692,6 +1257,17 @@ ON CONFLICT(name) DO UPDATE SET
 # --- CAPTURE COMMAND -----------------------------------------
 
 function Invoke-Capture {
+    Ensure-WorkflowStructure
+
+    $activeFeature = Get-FeatureDirectory -FeatureSelector ''
+    if ($activeFeature -and -not $Force) {
+        if (-not (Invoke-AnalyzeFeature -FeatureSelector $activeFeature -Quiet)) {
+            Write-Warn 'Gate de analise falhou para a feature ativa. Corrija spec/plan/tasks antes de capturar novas solucoes desta feature.'
+            Write-Info 'Use -Force se quiser ignorar o gate conscientemente.'
+            return
+        }
+    }
+
     Write-Title "Capturar Solução no Knowledge Hub"
     Write-Host ""
     
@@ -798,6 +1374,29 @@ VALUES
 
 # --- SEARCH COMMAND ------------------------------------------
 
+function Get-FtsQueryVariants {
+    param([string]$Text)
+
+    $tokens = @([regex]::Matches($Text, '[\p{L}\p{Nd}]+') | ForEach-Object { $_.Value.ToLowerInvariant() })
+    if ($tokens.Count -eq 0) {
+        $fallback = ($Text -replace "'", "''").Trim()
+        if (-not $fallback) {
+            return @()
+        }
+
+        return @($fallback)
+    }
+
+    $exactQuery = ($tokens | ForEach-Object { '"' + $_ + '"' }) -join ' '
+    $prefixQuery = ($tokens | ForEach-Object { '"' + $_ + '"*' }) -join ' OR '
+
+    if ($exactQuery -eq $prefixQuery) {
+        return @($exactQuery)
+    }
+
+    return @($exactQuery, $prefixQuery)
+}
+
 function Invoke-Search {
     param([string]$Query, [switch]$CrossProject)
 
@@ -828,7 +1427,6 @@ function Invoke-Search {
         }
     }
 
-    $safeQuery = Convert-ToSqlLiteral $Query
     $projectFilter = ''
     if ($CrossProject -and $projectContext) {
         $currentProjectName = Convert-ToSqlLiteral ([string]$projectContext.name)
@@ -846,22 +1444,50 @@ function Invoke-Search {
         'LIMIT 10;'
     ) -join "`n"
 
-    $searchSql = $searchTemplate -f $safeQuery, $projectFilter
+    $results = @()
+    foreach ($ftsQuery in (Get-FtsQueryVariants -Text $Query)) {
+        $safeFtsQuery = Convert-ToSqlLiteral $ftsQuery
+        $rawRows = @(Invoke-Sql -Query ($searchTemplate -f $safeFtsQuery, $projectFilter))
+        $parsedRows = @()
+        foreach ($rawRow in $rawRows) {
+            if ([string]::IsNullOrWhiteSpace([string]$rawRow)) {
+                continue
+            }
 
-    $resultsJson = Invoke-SqlJson -Query $searchSql
+            $cols = [string]$rawRow -split '\|', 13
+            if ($cols.Count -lt 13) {
+                continue
+            }
 
-    if (-not $resultsJson -or $resultsJson -eq '[]') {
-        $ftsQuery = (($Query -split '\s+' | ForEach-Object { "${_}*" }) -join ' OR ')
-        $resultsJson = Invoke-SqlJson -Query ($searchTemplate -f $ftsQuery, $projectFilter)
+            $parsedRows += [pscustomobject]@{
+                id = $cols[0]
+                domain = $cols[1]
+                pattern = $cols[2]
+                language = $cols[3]
+                framework = $cols[4]
+                source_project = $cols[5]
+                source_agent = $cols[6]
+                quality_score = $cols[7]
+                usage_count = $cols[8]
+                tokens_output = $cols[9]
+                solution_summary = $cols[10]
+                created_at = $cols[11]
+                score = $cols[12]
+            }
+        }
+
+        if ($parsedRows.Count -gt 0) {
+            $results = $parsedRows
+            break
+        }
     }
 
-    if (-not $resultsJson -or $resultsJson -eq '[]') {
+    if ($results.Count -eq 0) {
         Write-Warn "Nenhuma solução encontrada para: '$Query'"
         Write-Info "Após resolver com agente externo, use: .\iagents-factory.ps1 capture"
         return
     }
 
-    $results = @($resultsJson | ConvertFrom-Json)
     $index = 1
     foreach ($row in $results) {
         if ($null -ne $row) {
@@ -1107,6 +1733,11 @@ function Invoke-Help {
     Write-Host ''
     Write-Host '    init                     Inicializa o Knowledge Hub (SQLite)' -ForegroundColor White
     Write-Host '    register [path]          Registra projeto na fabrica' -ForegroundColor White
+    Write-Host '    constitution [foco]      Inicializa/atualiza a constituicao do projeto' -ForegroundColor White
+    Write-Host '    specify "desc"           Cria uma feature spec leve em specs/' -ForegroundColor White
+    Write-Host '    plan [contexto]          Gera plano tecnico da feature ativa' -ForegroundColor White
+    Write-Host '    tasks                    Gera tarefas e publica artefatos no Hub' -ForegroundColor White
+    Write-Host '    analyze [feature]        Executa gate de validacao do workflow' -ForegroundColor White
     Write-Host '    capture                  Captura solucao de agente externo' -ForegroundColor White
     Write-Host '    search "query"           Busca solucoes no Knowledge Hub' -ForegroundColor White
     Write-Host '    search-cross "query"     Busca cross-project' -ForegroundColor White
@@ -1134,6 +1765,11 @@ function Invoke-Help {
     Write-Host ''
     Write-Host '    .\iagents-factory.ps1 init' -ForegroundColor DarkGray
     Write-Host '    .\iagents-factory.ps1 register C:\projetos\meu-app' -ForegroundColor DarkGray
+    Write-Host '    .\iagents-factory.ps1 constitution "qualidade, simplicidade e reuso"' -ForegroundColor DarkGray
+    Write-Host '    .\iagents-factory.ps1 specify "Painel de intake de demandas com priorizacao"' -ForegroundColor DarkGray
+    Write-Host '    .\iagents-factory.ps1 plan "PowerShell + Node, SQLite, baixo acoplamento"' -ForegroundColor DarkGray
+    Write-Host '    .\iagents-factory.ps1 tasks' -ForegroundColor DarkGray
+    Write-Host '    .\iagents-factory.ps1 analyze' -ForegroundColor DarkGray
     Write-Host '    .\iagents-factory.ps1 search "calculo roi"' -ForegroundColor DarkGray
     Write-Host '    .\iagents-factory.ps1 capture -Domain financial -Pattern calculation' -ForegroundColor DarkGray
     Write-Host '    .\iagents-factory.ps1 stats' -ForegroundColor DarkGray
@@ -1148,6 +1784,11 @@ function Invoke-Help {
 switch ($Command) {
     "init"         { Invoke-Init }
     "register"     { Invoke-Register -ProjectPath $Arg1 }
+    "constitution" { Invoke-Constitution }
+    "specify"      { Invoke-Specify -Description $Arg1 }
+    "plan"         { Invoke-Plan -PlanContext $Arg1 }
+    "tasks"        { Invoke-Tasks }
+    "analyze"      { Invoke-Analyze }
     "capture"      { Invoke-Capture }
     "search"       { Invoke-Search -Query $Arg1 }
     "search-cross" { Invoke-Search -Query $Arg1 -CrossProject }
