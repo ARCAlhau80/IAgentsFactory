@@ -752,6 +752,18 @@ $remainingFiles = @()
 foreach ($file in $allFiles) {
     $content = Get-Content $file.FullName -Raw -Encoding UTF8
     $found = [regex]::Matches($content, '\[[A-Z_]{3,}\]')
+    $relativePath = $file.FullName.Substring($targetDir.Length).TrimStart('\')
+    $isTemplateLike = (
+        $relativePath -like '.github\agents\*' -or
+        $relativePath -like 'patterns\*' -or
+        $relativePath -like 'prompts\*' -or
+        $relativePath -like 'skills\*' -or
+        $relativePath -like 'specs\templates\*' -or
+        $file.Name.StartsWith('_example')
+    )
+    if ($isTemplateLike) {
+        continue
+    }
     if ($found.Count -gt 0) {
         $remainingCount += $found.Count
         $unique = ($found | ForEach-Object { $_.Value } | Sort-Object -Unique) -join ", "
@@ -808,7 +820,7 @@ if (Test-Path $factoryScript) {
     
     # Register project
     Write-Host "    Registrando projeto na Factory..." -ForegroundColor DarkGray
-    & $factoryScript register $targetDir
+    & $factoryScript register $targetDir -Language $finalLang -Framework $finalFw -DbType $finalDb
     
     Write-Host "    Use: .\iagents-factory.ps1 search 'query' para buscar solucoes" -ForegroundColor DarkGray
     Write-Host "    Use: .\iagents-factory.ps1 capture para salvar solucoes de agentes" -ForegroundColor DarkGray

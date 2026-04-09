@@ -1,6 +1,6 @@
-# Specs Workflow
+# [PROJECT_NAME] - Specs Workflow
 
-Esta pasta implementa um fluxo leve inspirado no Spec-Driven Development, adaptado para a IAgentsFactory.
+Esta pasta implementa um fluxo leve inspirado no Spec-Driven Development, adaptado para [PROJECT_NAME].
 
 ## Fluxo
 
@@ -40,7 +40,7 @@ specs/
 
 ## Presets
 
-Presets sobrescrevem templates sem alterar o core da factory.
+Presets sobrescrevem templates sem alterar o core do projeto bootstrapado pela factory.
 
 - Ativacao: `specs/presets/active-preset.json`
 - Resolucao: `specs/presets/<preset-id>/templates/*.md`

@@ -26,12 +26,13 @@ echo   [8] Buscar no Knowledge Hub
 echo   [9] Capturar solucao
 echo   [10] Metricas e Stats
 echo   [11] Listar projetos
+echo   [12] Novo projeto (wizard greenfield/existente)
 echo  --- CONFIG ---------------------------------
 echo   [4] Alterar caminho do template
 echo   [5] Sair
 echo  --------------------------------------------
 echo.
-set /p OPT="  Escolha [1-11]: "
+set /p OPT="  Escolha [1-12]: "
 
 if "%OPT%"=="1" goto SEMI
 if "%OPT%"=="2" goto AUTO
@@ -44,6 +45,7 @@ if "%OPT%"=="8" goto FACTORY_SEARCH
 if "%OPT%"=="9" goto FACTORY_CAPTURE
 if "%OPT%"=="10" goto FACTORY_STATS
 if "%OPT%"=="11" goto FACTORY_PROJECTS
+if "%OPT%"=="12" goto FACTORY_NEW_PROJECT
 echo.
 echo   Opcao invalida!
 timeout /t 2 >nul
@@ -134,6 +136,14 @@ goto MENU
 :FACTORY_PROJECTS
 echo.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%IAGENTSFACTORY_PATH%\iagents-factory.ps1" projects
+pause
+goto MENU
+
+:FACTORY_NEW_PROJECT
+echo.
+echo   Abrindo wizard de novo projeto...
+echo.
+powershell -NoProfile -ExecutionPolicy Bypass -File "%IAGENTSFACTORY_PATH%\new-project.ps1"
 pause
 goto MENU
 

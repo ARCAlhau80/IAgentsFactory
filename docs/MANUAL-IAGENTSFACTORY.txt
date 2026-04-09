@@ -139,6 +139,19 @@ Resultado esperado:
   - projeto IAgentsFactory registrado na fabrica
 
 
+PASSO 3.1 - Para projeto novo sem stack definida, usar o bootstrap guiado
+
+  Set-Location "C:\Users\AR CALHAU\source\repos\IAgentsFactory"
+  .\new-project.bat
+
+Resultado esperado:
+  - a factory coleta o contexto do negocio
+  - sugere stack, arquitetura, patterns, riscos e agentes
+  - cria a pasta do projeto quando necessario
+  - aplica docs, specs e scaffold tecnico inicial
+  - registra o projeto automaticamente na fabrica
+
+
 PASSO 4 - Inicializar a governanca leve da feature
 
   .\iagents-factory.ps1 constitution "qualidade, simplicidade e reuso multiprojeto"

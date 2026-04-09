@@ -6,6 +6,17 @@ Objetivo:
 Subir a Factory, registrar um projeto, criar uma spec leve, capturar uma solucao e ver o dashboard.
 
 
+ATALHO PARA PROJETO NOVO
+
+Se voce ainda nao tem projeto nem stack definidos, use primeiro:
+
+  Set-Location "C:\Users\AR CALHAU\source\repos\IAgentsFactory"
+  .\new-project.bat
+
+O wizard coleta contexto de negocio, sugere stack/arquitetura, aplica o kit da factory,
+cria o scaffold inicial e ja dispara o fluxo SPEC no projeto bootstrapado.
+
+
 PASSO 1 - Build do MCP Graph
 
   Set-Location "C:\Users\AR CALHAU\source\repos\mcp-graph-workflow"

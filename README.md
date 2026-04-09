@@ -60,6 +60,17 @@
 .\setup-ia-squad.ps1 -Auto
 ```
 
+### 3.1. Bootstrap de projeto novo ou existente
+```powershell
+# Wizard greenfield/existente
+.\new-project.bat
+
+# Ou direto no PowerShell
+.\new-project.ps1
+```
+
+O wizard coleta contexto de negocio, consulta a base local quando possivel, sugere stack/arquitetura/agentes, aplica o kit da factory, registra o projeto, gera `specs/` e cria o scaffold tecnico inicial.
+
 ### 4. Buscar e capturar soluções
 ```powershell
 # Buscar no Knowledge Hub
@@ -165,6 +176,8 @@ IAgentsFactory/
 │   ├── presets/                     ← Overrides de templates
 │   └── extensions/                  ← Regras extras para o gate analyze
 ├── .mcp.json                        ← Integração MCP Graph Workflow
+├── new-project.bat                  ← Entry-point do wizard de bootstrap
+├── new-project.ps1                  ← Wizard greenfield/existente da factory
 ├── iagents-factory.ps1              ← CLI principal da Factory
 ├── isgt-factory.ps1                 ← Wrapper de compatibilidade
 ├── capture-pipeline.ps1             ← Pipeline de captura automática

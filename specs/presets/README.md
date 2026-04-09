@@ -1,6 +1,6 @@
 # Presets
 
-Presets permitem customizar os templates do workflow sem alterar o core da IAgentsFactory.
+Presets permitem customizar os templates do workflow sem alterar o core do bootstrap da factory.
 
 ## Como funciona
 

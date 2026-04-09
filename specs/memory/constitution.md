@@ -1,15 +1,15 @@
-﻿# IAgentsFactory Constitution
+﻿# [PROJECT_NAME] Constitution
 
 ## Purpose
 
-Estabelecer um fluxo leve e reutilizavel de especificacao, planejamento, validacao e captura de conhecimento para a IAgentsFactory.
+Estabelecer um fluxo leve e reutilizavel de especificacao, planejamento, validacao e captura de conhecimento para [PROJECT_NAME].
 
 ## Core Principles
 
 1. Knowledge-first
    Buscar no acervo local antes de gerar algo novo.
 2. Product-first
-   Tratar a factory como produto separado do ISGT original.
+   Tratar [PROJECT_NAME] como produto com identidade clara e contexto proprio.
 3. Multi-project reuse
    Tudo novo deve considerar reuso entre projetos e processos.
 4. Lightweight governance

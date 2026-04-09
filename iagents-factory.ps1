@@ -42,6 +42,7 @@ param(
     [string]$Pattern = "",
     [string]$Language = "",
     [string]$Framework = "",
+    [string]$DbType = "",
     [string]$Agent = "",
     [double]$Quality = 0.8,
     [string[]]$Tags = @(),
@@ -66,7 +67,8 @@ $EXPORT_DIR = Join-Path $FACTORY_DIR "exports"
 $MCP_GRAPH_PATH = "C:\Users\AR CALHAU\source\repos\mcp-graph-workflow"
 $DASHBOARD_CONFIG_PATH = Join-Path $PSScriptRoot "config\dashboard-config.json"
 $FACTORY_DASHBOARD_SERVER = Join-Path $PSScriptRoot "tools\factory-dashboard\server.js"
-$WORKFLOW_DIR = Join-Path $PSScriptRoot "specs"
+$WORKFLOW_ROOT = (Get-Location).Path
+$WORKFLOW_DIR = Join-Path $WORKFLOW_ROOT "specs"
 $WORKFLOW_TEMPLATE_DIR = Join-Path $WORKFLOW_DIR "templates"
 $WORKFLOW_MEMORY_DIR = Join-Path $WORKFLOW_DIR "memory"
 $WORKFLOW_PRESET_DIR = Join-Path $WORKFLOW_DIR "presets"
@@ -170,7 +172,7 @@ function Get-ProjectNameForWorkflow {
         return [string]$projectContext.name
     }
 
-    return (Get-Item $PSScriptRoot).Name
+    return (Get-Item $WORKFLOW_ROOT).Name
 }
 
 function Convert-ToFeatureSlug {
@@ -1224,7 +1226,7 @@ function Invoke-Register {
     $projName = [string]$metadata.name
     $projLang = if ($Language) { $Language } else { [string]$metadata.language }
     $projFw = if ($Framework) { $Framework } else { [string]$metadata.framework }
-    $projDb = [string]$metadata.dbType
+    $projDb = if ($DbType) { $DbType } else { [string]$metadata.dbType }
     $projDesc = [string]$metadata.description
     
     $id = New-Id

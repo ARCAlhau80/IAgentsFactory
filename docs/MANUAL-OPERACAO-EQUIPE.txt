@@ -23,6 +23,11 @@ Inicio do dia:
   - .\iagents-factory.ps1 import arquivo-ou-export-mais-recente.json  (se houver)
   - .\iagents-factory.ps1 stats
 
+Quando surgir um projeto greenfield:
+  - rodar .\new-project.bat a partir da pasta da factory
+  - deixar a factory sugerir stack, arquitetura, riscos e agentes iniciais
+  - iniciar implementacao somente depois do SPEC inicial gerado
+
 Durante o trabalho:
   - buscar antes de perguntar
   - abrir spec/plan/tasks para features novas ou ambiguas
