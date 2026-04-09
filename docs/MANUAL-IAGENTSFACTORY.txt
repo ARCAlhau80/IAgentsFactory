@@ -1,0 +1,600 @@
+﻿===============================================================
+MANUAL OPERACIONAL - IAGENTSFACTORY + MCP GRAPH
+===============================================================
+
+Data: 2026-04-06
+Projeto: IAgentsFactory (evolucao do ISGT ADK)
+
+
+===============================================================
+1. O QUE ESTE SISTEMA E
+===============================================================
+
+O IAgentsFactory e uma fabrica de software com IA e memoria persistente.
+
+Na pratica, ele junta 3 camadas:
+
+1. ISGT
+   - Templates, agents, skills, prompts e automacao de setup.
+
+2. Knowledge Hub da Factory
+   - Banco SQLite local em %USERPROFILE%\.iagents-factory\knowledge.db
+   - Guarda solucoes aprendidas, projetos registrados, export/import,
+     metricas de reuso e economia de tokens.
+
+3. MCP Graph Workflow
+   - Servidor HTTP + dashboard visual.
+   - Focado em grafo de tarefas, PRD, backlog, insights e visualizacao.
+   - Hoje ele NAO e o banco principal do Knowledge Hub da Factory.
+
+
+===============================================================
+2. MODELO MENTAL CORRETO
+===============================================================
+
+Use assim:
+
+A. Factory = memoria operacional e reuso de conhecimento
+   - search
+   - search-cross
+   - capture
+   - import
+   - export
+   - stats
+
+B. MCP Graph = servidor web + dashboard visual
+   - serve
+   - dashboard
+   - visualizacao de grafo, backlog, insights
+
+C. Dashboard nativo da Factory = visao direta do knowledge.db
+  - KPIs
+  - alertas
+  - uso por projeto
+  - top solucoes e capturas recentes
+
+Resumo simples:
+
+- Quer salvar, buscar, reutilizar e medir conhecimento?
+  Use a Factory.
+
+- Quer interface visual, grafo e dashboard web?
+  Use o MCP Graph.
+
+
+===============================================================
+3. ONDE CADA COISA FICA
+===============================================================
+
+Repositorio IAgentsFactory:
+  C:\Users\AR CALHAU\source\repos\IAgentsFactory
+
+Repositorio MCP Graph:
+  C:\Users\AR CALHAU\source\repos\mcp-graph-workflow
+
+Banco da Factory:
+  %USERPROFILE%\.iagents-factory\knowledge.db
+
+Config da Factory:
+  %USERPROFILE%\.iagents-factory\factory-config.json
+
+Exports da Factory:
+  %USERPROFILE%\.iagents-factory\exports\
+
+
+===============================================================
+4. PRE-REQUISITOS
+===============================================================
+
+Voce precisa ter:
+
+1. Node.js instalado
+2. npm funcionando
+3. sqlite3.exe no PATH
+4. PowerShell funcionando no Windows
+
+Validacao rapida:
+
+  node -v
+  npm -v
+  sqlite3 --version
+
+
+===============================================================
+5. PRIMEIRA PREPARACAO DO AMBIENTE
+===============================================================
+
+PASSO 1 - Buildar o MCP Graph
+
+Execute uma vez, e depois sempre que atualizar o repositorio do MCP Graph:
+
+  Set-Location "C:\Users\AR CALHAU\source\repos\mcp-graph-workflow"
+  npm install
+  npm run build
+
+Resultado esperado:
+  - pasta dist/ criada
+  - dashboard web buildado
+
+
+PASSO 2 - Inicializar a Factory
+
+  Set-Location "C:\Users\AR CALHAU\source\repos\IAgentsFactory"
+  .\iagents-factory.ps1 init
+
+Resultado esperado:
+  - cria %USERPROFILE%\.iagents-factory\knowledge.db
+  - cria schema.sql
+  - cria factory-config.json
+
+
+PASSO 3 - Registrar o projeto atual
+
+  .\iagents-factory.ps1 register .
+
+Resultado esperado:
+  - projeto IAgentsFactory registrado na fabrica
+
+
+===============================================================
+6. COMO SUBIR O SERVIDOR DO DASHBOARD
+===============================================================
+
+O comando recomendado para o dashboard da Factory e:
+
+  Set-Location "C:\Users\AR CALHAU\source\repos\IAgentsFactory"
+  .\iagents-factory.ps1 dashboard
+
+Resultado esperado:
+  - servidor HTTP sobe em http://localhost:3010
+  - dashboard abre os dados do knowledge.db da Factory
+
+Para abrir o dashboard do MCP Graph:
+
+  .\iagents-factory.ps1 dashboard mcp
+
+Resultado esperado:
+  - servidor HTTP sobe em http://localhost:3000
+  - dashboard abre dados do workflow/task graph do MCP Graph
+
+Health check:
+
+  Invoke-WebRequest -UseBasicParsing http://localhost:3010/health |
+    Select-Object -ExpandProperty Content
+
+Resposta esperada:
+
+  {"ok":true,"server":"iagentsfactory-dashboard"}
+
+Para parar:
+  - Ctrl+C no terminal que esta rodando o dashboard
+
+
+===============================================================
+7. COMO USAR O DASHBOARD DO JEITO CERTO
+===============================================================
+
+IMPORTANTE:
+
+O dashboard padrao agora e o da Factory.
+Ele e ligado diretamente ao knowledge.db e mostra o estado real do Knowledge Hub.
+
+O dashboard do MCP Graph continua existindo como opcao separada.
+
+Use o dashboard para:
+
+1. Graph
+   - ver grafo de tarefas e relacoes
+
+2. PRD & Backlog
+   - ver itens importados e progresso
+
+3. Insights
+   - gargalos, visoes de progresso e metricas do projeto
+
+4. Benchmark
+   - dados de economia e comparacoes do MCP Graph
+
+5. GitNexus
+   - inteligencia de codigo, quando o GitNexus estiver saudavel
+
+Se o dashboard abrir mas parecer vazio:
+  - isso normalmente significa que o MCP Graph ainda nao recebeu PRD/import.
+
+
+===============================================================
+8. COMO POPULAR O MCP GRAPH COM DADOS VISUAIS
+===============================================================
+
+Se voce quiser ver conteudo real no dashboard do MCP Graph, faca isso:
+
+  Set-Location "C:\Users\AR CALHAU\source\repos\IAgentsFactory"
+  node "C:\Users\AR CALHAU\source\repos\mcp-graph-workflow\dist\cli\index.js" init
+  node "C:\Users\AR CALHAU\source\repos\mcp-graph-workflow\dist\cli\index.js" import "C:\Users\AR CALHAU\source\repos\mcp-graph-workflow\sample-prd.txt"
+  node "C:\Users\AR CALHAU\source\repos\mcp-graph-workflow\dist\cli\index.js" stats
+
+Depois recarregue:
+
+  http://localhost:3000
+
+Isso e o fluxo certo para o MCP Graph mostrar backlog, grafo e insights.
+
+
+===============================================================
+9. COMO COLOCAR PROJETOS NA FACTORY
+===============================================================
+
+A Factory trabalha com multiplos projetos registrados.
+
+Registrar um projeto existente:
+
+  .\iagents-factory.ps1 register C:\caminho\do\projeto
+
+Listar projetos registrados:
+
+  .\iagents-factory.ps1 projects
+
+Exemplo real:
+
+  .\iagents-factory.ps1 register C:\Users\AR CALHAU\source\repos\IAgentsFactory
+
+
+===============================================================
+10. CICLO CORRETO DE USO DO KNOWLEDGE HUB
+===============================================================
+
+Fluxo recomendado no dia a dia:
+
+PASSO 1 - Buscar antes de perguntar para IA externa
+
+  .\iagents-factory.ps1 search "calculo de ROI"
+
+Se encontrar algo util:
+  - reutilize a solucao
+
+Se nao encontrar:
+  - pergunte ao agente externo
+  - depois capture a resposta na Factory
+
+
+PASSO 2 - Capturar conhecimento novo
+
+Modo interativo:
+
+  .\iagents-factory.ps1 capture
+
+Modo por arquivo .solution.md:
+
+  .\capture-pipeline.ps1 -FromFile .\config\_example.solution.md -Project IAgentsFactory
+
+
+PASSO 3 - Buscar novamente depois
+
+  .\iagents-factory.ps1 search "roi"
+
+
+PASSO 4 - Ver metricas
+
+  .\iagents-factory.ps1 stats
+
+
+===============================================================
+11. FORMAS DE CAPTURA SUPORTADAS
+===============================================================
+
+A. Captura interativa manual
+
+  .\iagents-factory.ps1 capture
+
+Quando usar:
+  - voce acabou de receber uma solucao boa do agente externo
+  - quer cadastrar com mais controle
+
+
+B. Captura por arquivo .solution.md
+
+  .\capture-pipeline.ps1 -FromFile arquivo.solution.md -Project MeuProjeto
+
+Quando usar:
+  - voce quer um fluxo reproduzivel
+  - vai montar um acervo de solucoes versionadas
+
+
+C. Captura em lote
+
+  .\capture-pipeline.ps1 -Batch .\solutions\ -Project MeuProjeto
+
+Quando usar:
+  - migracao inicial de conhecimento
+  - importacao de varias solucoes de uma vez
+
+
+D. Captura por watch/clipboard
+
+  .\capture-pipeline.ps1 -Watch -Project MeuProjeto
+
+Quando usar:
+  - voce quer monitorar clipboard e capturar rapidamente
+
+
+===============================================================
+12. FORMATO CORRETO DO ARQUIVO .solution.md
+===============================================================
+
+Exemplo:
+
+  ---
+  domain: financial
+  pattern: calculation
+  language: java
+  framework: spring-boot
+  agent: claude-sonnet
+  quality: 0.9
+  tags: roi, investment, calculation
+  ---
+
+  ## Prompt
+  <pergunta original>
+
+  ## Solution
+  <codigo ou resposta>
+
+  ## Summary
+  <resumo curto para busca>
+
+Campos importantes:
+
+- domain
+  dominio de negocio
+
+- pattern
+  tipo de solucao
+
+- language
+  linguagem principal
+
+- framework
+  stack ou framework
+
+- quality
+  score inicial da solucao
+
+- tags
+  palavras para busca e classificacao
+
+
+===============================================================
+13. COMO BUSCAR CONHECIMENTO
+===============================================================
+
+Busca local no projeto atual:
+
+  .\iagents-factory.ps1 search "roi"
+
+Busca em outros projetos registrados:
+
+  .\iagents-factory.ps1 search-cross "roi"
+
+Comportamento esperado:
+
+- search
+  - procura no Knowledge Hub inteiro
+  - considera o contexto do projeto atual
+
+- search-cross
+  - tenta trazer conhecimento de outros projetos registrados
+  - se o projeto atual estiver identificado, exclui os matches do proprio projeto
+
+
+===============================================================
+14. COMO MEDIR O VALOR GERADO
+===============================================================
+
+Use:
+
+  .\iagents-factory.ps1 stats
+
+Voce vera:
+
+- solucoes armazenadas
+- projetos ativos
+- reusos totais
+- tokens consumidos
+- tokens economizados
+- custo evitado
+- qualidade media
+
+Essas metricas mostram se o Knowledge Hub esta realmente gerando ROI.
+
+
+===============================================================
+15. COMO COMPARTILHAR ENTRE DESENVOLVEDORES
+===============================================================
+
+O mecanismo atual de compartilhamento e por export/import JSON.
+
+DEV A - exporta:
+
+  .\iagents-factory.ps1 export
+
+Isso gera um arquivo em:
+
+  %USERPROFILE%\.iagents-factory\exports\
+
+DEV B - importa:
+
+  .\iagents-factory.ps1 import caminho\do\arquivo.json
+
+O sistema faz deduplicacao por content_hash.
+
+
+===============================================================
+16. COMANDOS PRINCIPAIS DA FACTORY
+===============================================================
+
+Inicializar:
+  .\iagents-factory.ps1 init
+
+Registrar projeto:
+  .\iagents-factory.ps1 register C:\Projeto
+
+Listar projetos:
+  .\iagents-factory.ps1 projects
+
+Captura interativa:
+  .\iagents-factory.ps1 capture
+
+Busca local:
+  .\iagents-factory.ps1 search "roi"
+
+Busca cross-project:
+  .\iagents-factory.ps1 search-cross "roi"
+
+Metricas:
+  .\iagents-factory.ps1 stats
+
+Export:
+  .\iagents-factory.ps1 export
+
+Import:
+  .\iagents-factory.ps1 import arquivo.json
+
+Cleanup:
+  .\iagents-factory.ps1 cleanup
+
+Dashboard:
+  .\iagents-factory.ps1 dashboard
+
+
+===============================================================
+17. COMANDOS PRINCIPAIS DO MCP GRAPH
+===============================================================
+
+Build:
+  npm run build
+
+Server + dashboard:
+  npm run dev
+
+Ou via CLI buildada:
+  node dist\cli\index.js serve --port 3000
+
+Init:
+  node dist\cli\index.js init
+
+Import de PRD:
+  node dist\cli\index.js import caminho-do-prd.txt
+
+Stats:
+  node dist\cli\index.js stats
+
+
+===============================================================
+18. ROTINA RECOMENDADA DE USO NO DIA A DIA
+===============================================================
+
+Rotina recomendada:
+
+1. Registrar o projeto na Factory
+2. Antes de perguntar para IA externa, rodar search
+3. Se nao houver match, usar agente externo
+4. Capturar a resposta boa
+5. Medir com stats
+6. Exportar periodicamente
+7. Usar o dashboard do MCP Graph para acompanhamento visual e backlog
+
+
+===============================================================
+19. TROUBLESHOOTING
+===============================================================
+
+PROBLEMA: dashboard nao sobe
+
+Verifique:
+  - MCP Graph foi buildado?
+  - existe pasta dist no repositorio mcp-graph-workflow?
+
+Comando:
+  Set-Location "C:\Users\AR CALHAU\source\repos\mcp-graph-workflow"
+  npm run build
+
+
+PROBLEMA: search nao encontra nada
+
+Verifique:
+  - a solucao foi realmente capturada?
+  - stats mostra pelo menos 1 solucao?
+  - o arquivo .solution.md esta com formato correto?
+
+
+PROBLEMA: export gera 0 solucoes
+
+Verifique:
+  - stats mostra solucoes armazenadas?
+  - quality_score das solucoes esta acima de 0.5?
+
+
+PROBLEMA: GitNexus mostra warning
+
+Hoje isso pode acontecer no Windows e nao bloqueia o dashboard.
+Se o objetivo for usar o dashboard e o Knowledge Hub, voce pode seguir mesmo assim.
+
+
+===============================================================
+20. ESTADO ATUAL DA SOLUCAO
+===============================================================
+
+Hoje o que ja esta funcional:
+
+- init da Factory
+- register de projetos
+- capture interativo
+- capture por arquivo .solution.md
+- search
+- search-cross
+- stats
+- export
+- import
+- dashboard do MCP Graph
+
+Limitacoes atuais importantes:
+
+- o dashboard e do MCP Graph, nao um painel nativo do knowledge.db da Factory
+- GitNexus pode falhar no Windows sem bloquear o restante
+- o ideal futuro e ter um dashboard visual direto para o Knowledge Hub da Factory
+
+
+===============================================================
+21. CAMINHO DE USO MAIS PRATICO PARA VOCE
+===============================================================
+
+Se quiser usar do jeito mais produtivo e simples, faca sempre assim:
+
+1. Suba o dashboard:
+   .\iagents-factory.ps1 dashboard
+
+2. Registre os projetos na Factory:
+   .\iagents-factory.ps1 register C:\ProjetoA
+   .\iagents-factory.ps1 register C:\ProjetoB
+
+3. Busque antes de perguntar:
+   .\iagents-factory.ps1 search "assunto"
+
+4. Capture toda resposta valiosa:
+   .\capture-pipeline.ps1 -FromFile arquivo.solution.md -Project ProjetoA
+
+5. Meça o ganho:
+   .\iagents-factory.ps1 stats
+
+6. Exporte para compartilhar:
+   .\iagents-factory.ps1 export
+
+
+===============================================================
+22. RESUMO EXECUTIVO EM UMA FRASE
+===============================================================
+
+Factory = memoria persistente e reuso.
+MCP Graph = servidor web e visualizacao.
+Use os dois juntos, mas sabendo que cada um resolve um problema diferente.
+

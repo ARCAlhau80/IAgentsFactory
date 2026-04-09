@@ -1,0 +1,15 @@
+﻿{
+  "mcpServers": {
+    "mcp-graph": {
+      "command": "node",
+      "args": ["C:/Users/AR CALHAU/source/repos/mcp-graph-workflow/dist/mcp/stdio.mjs"],
+      "env": {
+        "MCP_GRAPH_DB_PATH": ".iagents-factory/knowledge.db",
+        "MCP_GRAPH_PROJECT_NAME": "IAgentsFactory",
+        "NODE_ENV": "production"
+      },
+      "disabled": false
+    }
+  }
+}
+

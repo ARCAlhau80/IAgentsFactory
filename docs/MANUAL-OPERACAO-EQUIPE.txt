@@ -1,0 +1,171 @@
+﻿===============================================================
+MANUAL DE OPERACAO DIARIA DA EQUIPE - IAGENTSFACTORY
+===============================================================
+
+Objetivo:
+Padronizar o uso da Factory pela equipe e evitar perda de conhecimento.
+
+
+1. REGRA DE OURO
+
+Antes de perguntar para IA externa, sempre rode:
+
+  .\iagents-factory.ps1 search "tema"
+
+Se existir match util, reutilize.
+Se nao existir, gere com IA externa e capture depois.
+
+
+2. ROTINA DIARIA RECOMENDADA
+
+Inicio do dia:
+  - git pull
+  - .\iagents-factory.ps1 import arquivo-ou-export-mais-recente.json  (se houver)
+  - .\iagents-factory.ps1 stats
+
+Durante o trabalho:
+  - buscar antes de perguntar
+  - capturar toda solucao realmente reutilizavel
+  - classificar corretamente domain, pattern, language e tags
+
+Fim do dia:
+  - .\iagents-factory.ps1 export
+  - versionar o export compartilhavel, se o time usar esse fluxo
+
+
+3. QUANDO CAPTURAR
+
+Capture quando a solucao for:
+  - reutilizavel
+  - de qualidade boa
+  - relacionada a regra de negocio, arquitetura, integracao ou padrao tecnico
+
+Nao capture quando for:
+  - resposta trivial
+  - tentativa descartada
+  - codigo muito especifico e sem valor de reuso
+
+
+4. PADRAO MINIMO DE CLASSIFICACAO
+
+Sempre preencher:
+  - domain
+  - pattern
+  - language
+  - framework
+  - quality
+  - tags
+
+Exemplo bom:
+  domain: financial
+  pattern: calculation
+  language: java
+  framework: spring-boot
+  quality: 0.9
+  tags: roi, investment, monthly-return
+
+
+5. FLUXO PADRAO DE RESOLUCAO
+
+1. Buscar:
+   .\iagents-factory.ps1 search "problema"
+
+2. Se nao encontrar:
+   usar Copilot, Claude, GPT, OpenClaude ou outro agente
+
+3. Capturar a resposta boa:
+   .\capture-pipeline.ps1 -FromFile arquivo.solution.md -Project NomeDoProjeto
+
+4. Medir:
+   .\iagents-factory.ps1 stats
+
+
+6. FLUXO DE MULTIPLOS PROJETOS
+
+Registrar cada projeto uma vez:
+
+  .\iagents-factory.ps1 register C:\ProjetoA
+  .\iagents-factory.ps1 register C:\ProjetoB
+
+Exemplo real no ambiente local:
+
+  .\iagents-factory.ps1 register C:\Users\AR CALHAU\source\repos\IA-Gro
+  .\iagents-factory.ps1 register C:\Users\AR CALHAU\source\repos\LotoScope
+  .\iagents-factory.ps1 register C:\Users\AR CALHAU\source\repos\ToDo
+  .\iagents-factory.ps1 register C:\Users\AR CALHAU\source\repos\AtualizadorLotofacil
+
+Buscar em outros projetos:
+
+  .\iagents-factory.ps1 search-cross "auth jwt"
+
+Validar carteira ativa:
+
+  .\iagents-factory.ps1 projects
+
+
+7. FLUXO DE COMPARTILHAMENTO ENTRE PESSOAS
+
+Pessoa A:
+  .\iagents-factory.ps1 export
+
+Pessoa B:
+  .\iagents-factory.ps1 import caminho-do-export.json
+
+O import faz deduplicacao por hash.
+
+
+8. COMO ACOMPANHAR SAUDE DA BASE
+
+Usar:
+
+  .\iagents-factory.ps1 stats
+  .\iagents-factory.ps1 projects
+  .\iagents-factory.ps1 dashboard
+
+Dashboard da Factory:
+  http://localhost:3010
+
+O que observar:
+  - aumento de solucoes
+  - aumento de reuso
+  - crescimento de tokens economizados
+  - projetos com pouco aproveitamento
+  - alertas de solucoes pouco reutilizadas
+
+No ambiente local atual, espere ver pelo menos os projetos IAgentsFactory, IA-Gro, LotoScope, ToDo e AtualizadorLotofacil na carteira da fabrica.
+
+
+9. PADROES DE GOVERNANCA RECOMENDADOS
+
+- ter um responsavel tecnico por curadoria do acervo
+- revisar tags e domains de forma periodica
+- remover ou depreciar solucoes ruins
+- exportar periodicamente para evitar conhecimento isolado
+
+
+10. COMANDOS DA EQUIPE
+
+Buscar:
+  .\iagents-factory.ps1 search "tema"
+
+Buscar cross-project:
+  .\iagents-factory.ps1 search-cross "tema"
+
+Capturar interativo:
+  .\iagents-factory.ps1 capture
+
+Capturar por arquivo:
+  .\capture-pipeline.ps1 -FromFile arquivo.solution.md -Project Projeto
+
+Metricas:
+  .\iagents-factory.ps1 stats
+
+Projetos:
+  .\iagents-factory.ps1 projects
+
+Export:
+  .\iagents-factory.ps1 export
+
+Import:
+  .\iagents-factory.ps1 import arquivo.json
+

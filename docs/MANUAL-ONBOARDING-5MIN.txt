@@ -1,0 +1,108 @@
+﻿===============================================================
+ONBOARDING RAPIDO - IAGENTSFACTORY EM 5 MINUTOS
+===============================================================
+
+Objetivo:
+Subir a Factory, registrar um projeto, capturar uma solucao e ver o dashboard.
+
+
+PASSO 1 - Build do MCP Graph
+
+  Set-Location "C:\Users\AR CALHAU\source\repos\mcp-graph-workflow"
+  npm install
+  npm run build
+
+
+PASSO 2 - Inicializar a Factory
+
+  Set-Location "C:\Users\AR CALHAU\source\repos\IAgentsFactory"
+  .\iagents-factory.ps1 init
+
+
+PASSO 3 - Registrar o projeto atual
+
+  .\iagents-factory.ps1 register .
+
+
+PASSO 3.1 - Registrar exemplos reais da sua pasta source\repos
+
+  .\iagents-factory.ps1 register C:\Users\AR CALHAU\source\repos\IA-Gro
+  .\iagents-factory.ps1 register C:\Users\AR CALHAU\source\repos\LotoScope
+  .\iagents-factory.ps1 register C:\Users\AR CALHAU\source\repos\ToDo
+  .\iagents-factory.ps1 register C:\Users\AR CALHAU\source\repos\AtualizadorLotofacil
+
+Validar carteira registrada:
+
+  .\iagents-factory.ps1 projects
+
+
+PASSO 4 - Capturar um exemplo
+
+  .\capture-pipeline.ps1 -FromFile .\config\_example.solution.md -Project IAgentsFactory
+
+Ou carregar seeds reais da demonstracao multiprojeto:
+
+  .\capture-pipeline.ps1 -FromFile .\seed-solutions\todo-kanban-status-api.solution.md -Project ToDo
+  .\capture-pipeline.ps1 -FromFile .\seed-solutions\lotoscope-analytics-pipeline.solution.md -Project LotoScope
+
+
+PASSO 5 - Buscar conhecimento
+
+  .\iagents-factory.ps1 search "roi"
+
+Buscar em outros projetos registrados:
+
+  .\iagents-factory.ps1 search-cross "etl"
+
+
+PASSO 6 - Ver metricas
+
+  .\iagents-factory.ps1 stats
+
+
+PASSO 7 - Abrir o dashboard da Factory
+
+  .\iagents-factory.ps1 dashboard
+
+Abra no navegador:
+
+  http://localhost:3010
+
+Use os filtros de Projeto, Linguagem e Dominio para recortar o acervo exibido.
+
+
+PASSO 8 - Abrir o dashboard do MCP Graph, se quiser a visao de grafo
+
+  .\iagents-factory.ps1 dashboard mcp
+
+Abra no navegador:
+
+  http://localhost:3000
+
+
+RESUMO DO QUE CADA UM FAZ
+
+- http://localhost:3010
+  Dashboard da Factory, ligado ao knowledge.db
+
+- http://localhost:3000
+  Dashboard do MCP Graph, ligado ao workflow/task graph
+
+
+COMANDOS MINIMOS DO DIA A DIA
+
+  .\iagents-factory.ps1 search "assunto"
+  .\iagents-factory.ps1 capture
+  .\capture-pipeline.ps1 -FromFile arquivo.solution.md -Project MeuProjeto
+  .\iagents-factory.ps1 stats
+  .\iagents-factory.ps1 export
+
+
+EXEMPLO DE PORTFOLIO REAL DA FABRICA
+
+- IAgentsFactory: orquestrador da fabrica
+- IA-Gro: exemplo de projeto Python com .pyproj
+- LotoScope: exemplo Python analitico
+- ToDo: exemplo leve para onboarding
+- AtualizadorLotofacil: exemplo adicional de job .NET 8 com SQL Server
+

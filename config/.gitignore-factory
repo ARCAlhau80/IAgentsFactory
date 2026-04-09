@@ -1,0 +1,19 @@
+# IAgentsFactory — Gitignore para projetos clientes
+# Adicione ao .gitignore dos projetos que usam a Factory
+
+# Knowledge Hub local (binário SQLite — não versionar)
+.iagents-factory/knowledge.db
+.iagents-factory/knowledge.db-wal
+.iagents-factory/knowledge.db-shm
+
+# Config local
+.iagents-factory/factory-config.json
+.iagents-factory/capture-log.json
+
+# Logs e temp
+.iagents-factory/token-usage.json
+.iagents-factory/temp/
+
+# MANTER versionados (para team sync):
+# .iagents-factory/exports/*.json    ← knowledge compartilhado
+# .iagents-factory/schema.sql        ← schema do banco

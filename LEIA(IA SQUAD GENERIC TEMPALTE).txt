@@ -1,0 +1,15 @@
+﻿
+Instalacao:
+
+Passo 1 Copie o template IAgentsFactory para uma pasta do seu repositorio.
+
+Passo 2 Copie o setup.bat da pasta do template para a pasta do seu projeto. Exemplo: ~\source\repos\IAgentsFactory\setup.bat para ~\source\repos\PC-TUNNER\setup.bat
+
+Passo 3 Altere via BAT (opcao 4) ou diretamente no script .bat o caminho para o template.
+
+Passo 4 Se ja existe um projeto, use a opcao semi-automatica ou automatica para deteccao.
+
+Passo 5 Preencha os dados restantes dos arquivos MD necessarios.
+
+
+

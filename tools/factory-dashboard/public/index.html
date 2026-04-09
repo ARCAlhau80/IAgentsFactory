@@ -1,0 +1,108 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IAgentsFactory Dashboard</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <div class="page-shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">Knowledge Hub</p>
+        <h1>IAgentsFactory Dashboard</h1>
+        <p class="subtitle">Visao operacional do knowledge.db da Factory com KPIs, distribuicoes, alertas e uso por projeto.</p>
+      </div>
+      <div class="hero-meta">
+        <div class="meta-card">
+          <span class="meta-label">Ultima atualizacao</span>
+          <strong id="generated-at">-</strong>
+        </div>
+        <div class="meta-card">
+          <span class="meta-label">Refresh</span>
+          <strong id="refresh-interval">-</strong>
+        </div>
+      </div>
+    </header>
+
+    <section id="filters" class="filters-panel"></section>
+
+    <section id="alerts" class="alerts"></section>
+
+    <section id="kpis" class="kpi-grid"></section>
+
+    <section class="grid-two">
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Solucoes por Dominio</h2>
+          <span>Onde a Factory mais aprende</span>
+        </div>
+        <div id="domains" class="bar-list"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Solucoes por Agente</h2>
+          <span>Origem do conhecimento capturado</span>
+        </div>
+        <div id="agents" class="bar-list"></div>
+      </article>
+    </section>
+
+    <section class="grid-two">
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Distribuicao de Qualidade</h2>
+          <span>Score agregado das solucoes</span>
+        </div>
+        <div id="quality" class="bar-list compact"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Capturas por Mes</h2>
+          <span>Evolucao recente do acervo</span>
+        </div>
+        <div id="timeline" class="bar-list"></div>
+      </article>
+    </section>
+
+    <section class="grid-two tables">
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Top Solucoes</h2>
+          <span>Mais reutilizadas no momento</span>
+        </div>
+        <div id="top-solutions"></div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-head">
+          <h2>Ultimas Capturas</h2>
+          <span>Conhecimento recem incorporado</span>
+        </div>
+        <div id="recent-captures"></div>
+      </article>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Projetos Registrados</h2>
+        <span>Uso acumulado da fabrica por projeto</span>
+      </div>
+      <div id="projects"></div>
+    </section>
+  </div>
+
+  <template id="table-template">
+    <table class="data-table">
+      <thead></thead>
+      <tbody></tbody>
+    </table>
+  </template>
+
+  <script src="/app.js"></script>
+</body>
+</html>
+

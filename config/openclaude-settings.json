@@ -1,0 +1,94 @@
+﻿{
+  "_comment": "IAgentsFactory — OpenClaude Configuration Template",
+  "_usage": "Copie para ~/.openclaude/settings.json e ajuste os providers",
+
+  "defaultModel": "claude-sonnet-4-20250514",
+  "maxThinkingTokens": 16000,
+  "customInstructions": "Você é um agente da IAgentsFactory. ANTES de gerar código: 1) Busque soluções existentes no Knowledge Hub via MCP tool search_solutions; 2) Se encontrar match >= 0.75, REUTILIZE adaptando; 3) Se não encontrar, gere e CAPTURE a solução via MCP tool capture_solution. Siga os padrões em patterns/ e skills/ do projeto.",
+
+  "agentModels": {
+    "ARCHITECT": "claude-sonnet-4-20250514",
+    "BACKEND": "claude-sonnet-4-20250514",
+    "QA": "gpt-4o",
+    "REFACTOR": "deepseek-coder-v2",
+    "KNOWLEDGE": "claude-sonnet-4-20250514",
+    "OBSERVABILITY": "gpt-4o-mini",
+    "COORDINATOR": "claude-sonnet-4-20250514"
+  },
+
+  "agentRouting": {
+    "rules": [
+      {
+        "pattern": "test|spec|coverage|qa",
+        "agent": "QA",
+        "model": "gpt-4o"
+      },
+      {
+        "pattern": "refactor|smell|clean|lint",
+        "agent": "REFACTOR",
+        "model": "deepseek-coder-v2"
+      },
+      {
+        "pattern": "search.*knowledge|busca.*solução|reuse|reutiliz",
+        "agent": "KNOWLEDGE",
+        "model": "claude-sonnet-4-20250514"
+      },
+      {
+        "pattern": "log|metric|trace|monitor|observ",
+        "agent": "OBSERVABILITY",
+        "model": "gpt-4o-mini"
+      },
+      {
+        "pattern": "architect|design|pattern|performance",
+        "agent": "ARCHITECT",
+        "model": "claude-sonnet-4-20250514"
+      },
+      {
+        "pattern": "plan|sprint|task|priority|backlog",
+        "agent": "COORDINATOR",
+        "model": "claude-sonnet-4-20250514"
+      }
+    ],
+    "defaultAgent": "BACKEND"
+  },
+
+  "mcpServers": [
+    {
+      "name": "iagentsfactory-knowledge-hub",
+      "transport": "stdio",
+      "command": "node",
+      "args": ["C:/Users/AR CALHAU/source/repos/mcp-graph-workflow/dist/mcp/stdio.mjs"],
+      "env": {
+        "MCP_GRAPH_DB_PATH": "${HOME}/.iagents-factory/knowledge.db"
+      }
+    }
+  ],
+
+  "providers": {
+    "_comment": "Configure suas API keys como variáveis de ambiente",
+    "anthropic": {
+      "apiKey": "${ANTHROPIC_API_KEY}",
+      "models": ["claude-sonnet-4-20250514", "claude-haiku-3"]
+    },
+    "openai": {
+      "apiKey": "${OPENAI_API_KEY}",
+      "models": ["gpt-4o", "gpt-4o-mini"]
+    },
+    "deepseek": {
+      "apiKey": "${DEEPSEEK_API_KEY}",
+      "models": ["deepseek-coder-v2", "deepseek-chat"]
+    },
+    "ollama": {
+      "baseUrl": "http://localhost:11434",
+      "models": ["codellama:34b", "deepseek-coder:33b"]
+    }
+  },
+
+  "tokenBudget": {
+    "dailyLimit": 500000,
+    "warningAt": 400000,
+    "trackUsage": true,
+    "reportPath": "${HOME}/.iagents-factory/token-usage.json"
+  }
+}
+

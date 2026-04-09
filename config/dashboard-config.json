@@ -1,0 +1,125 @@
+﻿{
+  "dashboard": {
+    "title": "IAgentsFactory — Knowledge Hub Dashboard",
+    "port": 3010,
+    "refreshInterval": 30000
+  },
+  
+  "database": {
+    "path": "${HOME}/.iagents-factory/knowledge.db",
+    "journalMode": "WAL",
+    "busyTimeout": 5000
+  },
+  
+  "widgets": [
+    {
+      "id": "kpi-solutions",
+      "type": "metric",
+      "title": "Total Soluções",
+      "query": "SELECT COUNT(*) as value FROM learned_solutions WHERE is_deprecated = 0",
+      "icon": "brain",
+      "color": "#4CAF50"
+    },
+    {
+      "id": "kpi-projects",
+      "type": "metric",
+      "title": "Projetos Ativos",
+      "query": "SELECT COUNT(*) as value FROM factory_projects WHERE is_active = 1",
+      "icon": "folder",
+      "color": "#2196F3"
+    },
+    {
+      "id": "kpi-tokens-saved",
+      "type": "metric",
+      "title": "Tokens Economizados",
+      "query": "SELECT COALESCE(SUM(tokens_saved), 0) as value FROM learned_solutions",
+      "icon": "savings",
+      "color": "#FF9800",
+      "format": "number"
+    },
+    {
+      "id": "kpi-reuses",
+      "type": "metric",
+      "title": "Total Reusos",
+      "query": "SELECT COALESCE(SUM(usage_count), 0) as value FROM learned_solutions",
+      "icon": "recycling",
+      "color": "#9C27B0"
+    },
+    {
+      "id": "kpi-cost-saved",
+      "type": "metric",
+      "title": "Custo Economizado (USD)",
+      "query": "SELECT ROUND(COALESCE(SUM(tokens_saved), 0) / 1000000.0 * 3.0, 2) as value FROM learned_solutions",
+      "icon": "attach_money",
+      "color": "#4CAF50",
+      "format": "currency"
+    },
+    {
+      "id": "chart-domains",
+      "type": "pie",
+      "title": "Soluções por Domínio",
+      "query": "SELECT domain as label, COUNT(*) as value FROM learned_solutions WHERE is_deprecated = 0 GROUP BY domain ORDER BY value DESC LIMIT 8"
+    },
+    {
+      "id": "chart-agents",
+      "type": "bar",
+      "title": "Soluções por Agente",
+      "query": "SELECT source_agent as label, COUNT(*) as value FROM learned_solutions WHERE is_deprecated = 0 AND source_agent != '' GROUP BY source_agent ORDER BY value DESC"
+    },
+    {
+      "id": "chart-quality",
+      "type": "histogram",
+      "title": "Distribuição de Qualidade",
+      "query": "SELECT CAST(quality_score * 10 AS INTEGER) / 10.0 as bucket, COUNT(*) as count FROM learned_solutions WHERE is_deprecated = 0 GROUP BY bucket ORDER BY bucket"
+    },
+    {
+      "id": "chart-timeline",
+      "type": "line",
+      "title": "Capuras por Mês",
+      "query": "SELECT strftime('%Y-%m', created_at) as month, COUNT(*) as captures, COALESCE(SUM(tokens_output), 0) as tokens FROM learned_solutions GROUP BY month ORDER BY month DESC LIMIT 12"
+    },
+    {
+      "id": "table-top-solutions",
+      "type": "table",
+      "title": "Top 10 Soluções Mais Reutilizadas",
+      "query": "SELECT domain, pattern, language, usage_count, quality_score, solution_summary FROM learned_solutions WHERE is_deprecated = 0 ORDER BY usage_count DESC, quality_score DESC LIMIT 10",
+      "columns": ["Domínio", "Pattern", "Lang", "Usos", "Quality", "Resumo"]
+    },
+    {
+      "id": "table-recent",
+      "type": "table",
+      "title": "Últimas 10 Capturas",
+      "query": "SELECT domain, pattern, source_agent, quality_score, created_at, solution_summary FROM learned_solutions ORDER BY created_at DESC LIMIT 10",
+      "columns": ["Domínio", "Pattern", "Agente", "Quality", "Data", "Resumo"]
+    },
+    {
+      "id": "table-projects",
+      "type": "table",
+      "title": "Projetos da Fábrica",
+      "query": "SELECT name, language, framework, total_solutions_used, total_tokens_saved, last_active_at FROM factory_projects WHERE is_active = 1 ORDER BY last_active_at DESC",
+      "columns": ["Projeto", "Lang", "Framework", "Soluções", "Tokens Salvos", "Último Uso"]
+    }
+  ],
+  
+  "alerts": [
+    {
+      "id": "low-reuse",
+      "condition": "SELECT COUNT(*) FROM learned_solutions WHERE quality_score >= 0.8 AND usage_count = 0 AND created_at < datetime('now', '-30 days')",
+      "threshold": 10,
+      "message": "Existem {value} soluções de alta qualidade sem reuso. Considere promovê-las."
+    },
+    {
+      "id": "stale-solutions",
+      "condition": "SELECT COUNT(*) FROM learned_solutions WHERE is_deprecated = 0 AND (last_used_at IS NULL OR last_used_at < datetime('now', '-180 days'))",
+      "threshold": 20,
+      "message": "Existem {value} soluções sem uso há 6+ meses. Considere cleanup."
+    },
+    {
+      "id": "token-budget",
+      "condition": "SELECT COALESCE(SUM(total_tokens_used), 0) FROM learning_sessions WHERE started_at >= date('now', 'start of month')",
+      "threshold": 400000,
+      "message": "Uso de tokens este mês: {value}. Aproximando do limite diário."
+    }
+  ]
+}
+
