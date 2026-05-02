@@ -35,11 +35,27 @@ Como mantenedor do produto, quero que a feature tenha fronteiras claras para evo
 - A feature deve ser compativel com um fluxo incremental de entrega.
 - A feature deve considerar observabilidade e validacao minima.
 
+## Engineering Pillars Applicability
+
+| Pilar | Relevância | Notas |
+|-------|-----------|-------|
+| 🔒 Security | Alta/Média/N/A | [Descrever: inputs externos? auth? secrets?] |
+| 🏗️ Arquitetura | Alta/Média/N/A | [Descrever: camadas envolvidas, dependências] |
+| 🧪 Qualidade | Alta/Média/N/A | [Descrever: nível de testes esperado] |
+| 🚀 DevOps | Alta/Média/N/A | [Descrever: pipeline, health check, logs] |
+
+## Non-Functional Requirements
+
+- Segurança: [ex: autenticação obrigatória, inputs validados, sem hardcode de segredos]
+- Observabilidade: [ex: logs estruturados para operações críticas, health check]
+- Testabilidade: [ex: cobertura mínima de 70% na lógica de negócio]
+
 ## Success Criteria
 
 - A equipe consegue entender o que precisa ser entregue sem ambiguidade excessiva.
 - O plano tecnico pode ser derivado sem reescrever o objetivo funcional.
 - As tarefas geradas podem ser executadas por partes.
+- Os 4 Engineering Pillars foram considerados e os aplicáveis estão cobertos.
 
 ## Assumptions
 

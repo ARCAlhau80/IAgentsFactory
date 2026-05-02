@@ -131,6 +131,78 @@ EXEMPLOS DE REGRAS COMUNS (copie as relevantes):
 
 ---
 
+## � REGRA 4: Security by Design em Todo Projeto Gerado
+
+### Descrição
+Todo projeto scaffoldado pela factory deve aplicar princípios de segurança desde o início. Segurança não é opcional nem pode ser adicionada depois.
+
+### ❌ Violação
+
+```
+API_KEY = "abc123"                          # hardcode de segredo
+query = "SELECT * WHERE id = " + userId     # SQL Injection
+app.use(cors({ origin: '*' }))              # CORS aberto
+```
+
+### ✅ Correto
+
+```
+API_KEY = process.env.API_KEY               # variável de ambiente
+query = "SELECT * WHERE id = ?", [userId]   # query parametrizada
+app.use(cors({ origin: ALLOWED_ORIGINS }))  # origens explícitas
+```
+
+### Impacto de Violação
+- Vulnerabilidades OWASP Top 10, exposição de dados, comprometimento da aplicação.
+
+---
+
+## 🚨 REGRA 5: Nomes Semânticos e Pirâmide de Testes
+
+### Descrição
+Código gerado pela factory deve usar nomes descritivos e incluir estrutura de testes desde a fundação.
+
+### ❌ Violação
+
+```
+const d = 86400;
+function fn(x) { return x * d; }
+// sem arquivos de teste
+```
+
+### ✅ Correto
+
+```
+const SECONDS_IN_A_DAY = 86400;
+function calculateTotalSeconds(days) { return days * SECONDS_IN_A_DAY; }
+// + calculateTotalSeconds.test.js
+```
+
+### Impacto de Violação
+- Código ilegível, difícil de manter, regressões não detectadas.
+
+---
+
+## 🚨 REGRA 6: CI/CD e Observabilidade São Obrigatórios
+
+### Descrição
+Todo projeto que vai para produção deve ter pipeline de CI/CD e mecanismos de log/monitoramento. Nenhum projeto pode ir a produção sem saber que está funcionando.
+
+### ❌ Violação
+- Sem arquivo `.github/workflows/ci.yml` ou equivalente
+- Sem estratégia de logging além de `console.log`
+- Deploy manual sem validação automatizada
+
+### ✅ Correto
+- Pipeline CI que executa testes antes de qualquer merge
+- Logs estruturados com nível (info/warn/error) e contexto
+- Health check endpoint em toda API
+
+### Impacto de Violação
+- Bugs chegam em produção sem detecção, downtime sem diagnóstico.
+
+---
+
 ## 📋 Checklist Rápido
 
 Antes de fazer merge/commit, verifique:
@@ -140,4 +212,9 @@ Antes de fazer merge/commit, verifique:
 - [ ] A mudança reforça a identidade de produto da factory
 - [ ] Sem secrets/credentials no código
 - [ ] Sem caminhos absolutos novos sem justificativa
+- [ ] Input externo validado e sanitizado
+- [ ] Nomes de variáveis e funções são descritivos
+- [ ] Existe estrutura de teste para a lógica nova
+- [ ] Pipeline CI configurado ou atualizado
+- [ ] Logs estruturados para operações críticas
 

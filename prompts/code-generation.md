@@ -4,6 +4,12 @@
 **Agente:** BACKEND  
 **Aplicabilidade:** Qualquer stack (Java, TypeScript, Python, C#)
 
+> ⚠️ **Engineering Pillars — obrigatório em todo código gerado:**  
+> **Segurança:** Validar todo input; nunca hardcodar segredos; usar queries parametrizadas; princípio do menor privilégio.  
+> **Arquitetura:** SOLID + Clean Architecture; desacoplar regras de negócio de detalhes técnicos; DRY; KISS.  
+> **Qualidade:** Nomes semânticos; logs estruturados; testes unitários para toda lógica de negócio.  
+> **DevOps:** Health check em toda API; logs com nível e contexto; preparado para CI/CD.
+
 ---
 
 ## PROMPT #1 — Gerar Controller/Endpoint Completo
@@ -30,6 +36,9 @@ REQUISITOS:
 - Injetar service (DI), nunca repository direto
 - Retornar status codes corretos (201, 204, etc.)
 - Adicionar comentários apenas onde a lógica não é óbvia
+- Validar e sanitizar todo input recebido (nunca confiar no caller)
+- Verificar autorização em cada endpoint (ownership/role)
+- Não expor stack traces em respostas de erro (mensagem genérica em produção)
 
 OUTPUT:
 - [Entity]Controller (com todos os endpoints)
@@ -176,3 +185,47 @@ REQUISITOS:
 OUTPUT:
 Listar cada arquivo com path completo e conteúdo.
 ```
+
+---
+
+## PROMPT #6 — Security Review de Código Gerado
+
+**Quando usar:** Validar segurança de qualquer componente antes de merge.
+
+```
+CONTEXTO:
+- Arquivo(s): [PATH(S)]
+- Stack: [LANGUAGE] + [FRAMEWORK]
+- Skills: ver skills/security-basics.md
+
+TAREFA:
+Revisar o código sob a ótica dos Engineering Pillars:
+
+1. SEGURANÇA (OWASP Top 10):
+   - Há inputs externos sem validação/sanitização?
+   - Há queries construídas por concatenação? (SQL/NoSQL Injection)
+   - Há credenciais, tokens ou secrets hardcoded?
+   - CORS configurado com origens explícitas?
+   - Erros expõem stack traces ou dados internos?
+   - Verificação de autorização em todos os endpoints?
+
+2. ARQUITETURA:
+   - Regras de negócio estão no service (não no controller/handler)?
+   - Dependências seguem Clean Architecture (camadas)? 
+   - Existe lógica duplicada que deveria ser abstraída (DRY)?
+
+3. QUALIDADE:
+   - Nomes de variáveis/funções são descritivos?
+   - Há testes unitários para a lógica de negócio?
+   - Logs estruturados com nível correto (info/warn/error)?
+
+4. DEVOPS:
+   - Existe health check se for um serviço?
+   - Configurações via variáveis de ambiente?
+
+OUTPUT:
+- Lista de issues encontrados (crítico/médio/baixo)
+- Sugestão de correção para cada issue
+- Aprovado/Condicional/Rejeitado
+```
+

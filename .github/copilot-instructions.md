@@ -23,6 +23,21 @@
 4. ✅ Não hardcodar credenciais nem depender de caminhos absolutos em lógica nova quando houver alternativa configurável.
 5. ✅ Scripts, funções e nomes técnicos em inglês; explicações e documentação podem permanecer em português.
 6. ✅ Para mudanças novas ou ambíguas, preferir o fluxo `constitution -> specify -> plan -> tasks -> analyze` antes de capturar ou implementar.
+7. ✅ **Security by Design:** todo projeto gerado deve validar inputs, usar queries parametrizadas, carregar segredos via env vars e aplicar princípio do menor privilégio — ver `skills/engineering-pillars.md`.
+8. ✅ **Arquitetura limpa:** regras de negócio no service/use-case; entity nunca exposta na API; dependências injetadas (DI); Clean Architecture + SOLID.
+9. ✅ **Qualidade obrigatória:** nomes semânticos; testes unitários para toda lógica de negócio; code review antes de merge.
+10. ✅ **DevOps integrado:** todo projeto com pipeline CI, health check (se API), logs estruturados e configuração via variáveis de ambiente.
+
+---
+
+## 🏗️ Engineering Pillars (obrigatório em todos os projetos)
+
+| Pilar | Princípios chave | Referência |
+|-------|-----------------|------------|
+| 🔒 **Security** | Menor privilégio; validar inputs; sem hardcode de segredos; TLS; bcrypt/Argon2 | `skills/engineering-pillars.md` + `skills/security-basics.md` |
+| 🏛️ **Arquitetura** | SOLID; Clean Architecture; DRY; KISS; desacoplar domínio de infra | `skills/clean-architecture.md` |
+| 🧪 **Qualidade** | Nomes semânticos; pirâmide de testes (70% unit); code review | `skills/testing-strategies.md` |
+| 🚀 **DevOps** | CI/CD automatizado; logs estruturados; health check; IaC | `skills/ci-cd.md` + `skills/observability.md` |
 
 ---
 
@@ -36,6 +51,7 @@
 | **Agents** | [.github/agents/](agents/) | Agentes IA especializados |
 | **Patterns** | [patterns/](../../patterns/) | Templates de design patterns |
 | **Skills** | [skills/](../../skills/) | How-to guides técnicos |
+| **Engineering Pillars** | [skills/engineering-pillars.md](../../skills/engineering-pillars.md) | Checklist de segurança, arquitetura, qualidade e DevOps |
 | **Prompts** | [prompts/](../../prompts/) | Prompts prontos para IA |
 | **Docs** | [docs/](../../docs/) | Arquitetura, legacy analysis, ADRs |
 | **Type Matrix** | [.github/context/type_matrix.md](context/type_matrix.md) | Inventário de componentes |

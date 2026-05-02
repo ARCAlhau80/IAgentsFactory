@@ -21,6 +21,7 @@
 #   .\iagents-factory.ps1 import [file]           -> Importa knowledge de outro dev
 #   .\iagents-factory.ps1 cleanup                 -> Remove soluções stale
 #   .\iagents-factory.ps1 dashboard               -> Abre dashboard MCP Graph
+#   .\iagents-factory.ps1 update-pillars [path]   -> Aplica Engineering Pillars em projeto existente
 #
 # REQUER:
 #   - Node.js (para MCP Graph Workflow)
@@ -29,7 +30,7 @@
 
 param(
     [Parameter(Position=0)]
-    [ValidateSet("init","register","constitution","specify","plan","tasks","analyze","capture","search","search-cross","stats","projects","export","import","cleanup","dashboard","help")]
+    [ValidateSet("init","register","constitution","specify","plan","tasks","analyze","capture","search","search-cross","stats","projects","export","import","cleanup","dashboard","update-pillars","help")]
     [string]$Command = "help",
 
     [Parameter(Position=1)]
@@ -1749,6 +1750,7 @@ function Invoke-Help {
     Write-Host '    import [file]            Importa knowledge de outro dev' -ForegroundColor White
     Write-Host '    cleanup                  Remove solucoes stale/depreciadas' -ForegroundColor White
     Write-Host '    dashboard [factory|mcp]  Abre dashboard da Factory (padrao) ou MCP Graph' -ForegroundColor White
+    Write-Host '    update-pillars [path]    Aplica Engineering Pillars em projeto existente' -ForegroundColor White
     Write-Host '    help                     Este menu' -ForegroundColor White
     Write-Host ''
     Write-Host '  FLAGS:' -ForegroundColor Yellow
@@ -1781,6 +1783,143 @@ function Invoke-Help {
     Write-Host ''
 }
 
+# --- UPDATE-PILLARS COMMAND ----------------------------------
+
+function Invoke-UpdatePillars {
+    param([string]$TargetPath)
+
+    if (-not $TargetPath) {
+        $TargetPath = (Get-Location).Path
+    }
+
+    if (-not (Test-Path $TargetPath)) {
+        Write-Err "Caminho nao encontrado: $TargetPath"
+        return
+    }
+
+    $TargetPath = (Resolve-Path $TargetPath).Path
+    $FactoryRoot = $PSScriptRoot
+
+    Write-Title "Aplicando Engineering Pillars em: $TargetPath"
+
+    # 1. Copiar/atualizar skills/engineering-pillars.md
+    $srcPillars = Join-Path $FactoryRoot "skills\engineering-pillars.md"
+    if (Test-Path $srcPillars) {
+        $dstSkills = Join-Path $TargetPath "skills"
+        if (-not (Test-Path $dstSkills)) {
+            New-Item -ItemType Directory -Path $dstSkills -Force | Out-Null
+        }
+        Copy-Item -Path $srcPillars -Destination (Join-Path $dstSkills "engineering-pillars.md") -Force
+        Write-Ok "skills/engineering-pillars.md atualizado"
+    } else {
+        Write-Warn "skills/engineering-pillars.md nao encontrado na factory raiz — pulando copia de skill."
+    }
+
+    # 2. Copiar/atualizar prompts/code-generation.md
+    $srcCodeGen = Join-Path $FactoryRoot "prompts\code-generation.md"
+    if (Test-Path $srcCodeGen) {
+        $dstPrompts = Join-Path $TargetPath "prompts"
+        if (-not (Test-Path $dstPrompts)) {
+            New-Item -ItemType Directory -Path $dstPrompts -Force | Out-Null
+        }
+        Copy-Item -Path $srcCodeGen -Destination (Join-Path $dstPrompts "code-generation.md") -Force
+        Write-Ok "prompts/code-generation.md atualizado"
+    }
+
+    # 3. Copiar/atualizar templates de spec workflow
+    $templateFiles = @("spec-template.md", "plan-template.md", "tasks-template.md")
+    $srcTemplates = Join-Path $FactoryRoot "specs\templates"
+    $dstTemplates = Join-Path $TargetPath "specs\templates"
+    if (Test-Path $srcTemplates) {
+        if (-not (Test-Path $dstTemplates)) {
+            New-Item -ItemType Directory -Path $dstTemplates -Force | Out-Null
+        }
+        foreach ($tpl in $templateFiles) {
+            $srcFile = Join-Path $srcTemplates $tpl
+            if (Test-Path $srcFile) {
+                Copy-Item -Path $srcFile -Destination (Join-Path $dstTemplates $tpl) -Force
+            }
+        }
+        Write-Ok "specs/templates atualizados (spec, plan, tasks)"
+    }
+
+    # 4. Atualizar constitution.md se existir (adicionar pilares se ausentes)
+    $constitutionPath = Join-Path $TargetPath "specs\memory\constitution.md"
+    if (Test-Path $constitutionPath) {
+        $content = Get-Content $constitutionPath -Raw -Encoding UTF8
+        if ($content -notmatch 'Engineering Pillars') {
+            $pillarsSection = @"
+
+## Engineering Pillars (obrigatorio em todos os projetos)
+
+### Pilar 1 — Security by Design
+- Principio do Menor Privilegio: cada componente tem apenas as permissoes estritamente necessarias.
+- Nunca confiar na entrada do usuario: validar e sanitizar todo input externo.
+- Gestao de Segredos: jamais hardcodar senhas ou tokens; usar variaveis de ambiente ou vault.
+- Criptografia: TLS para dados em transito; Argon2 ou BCrypt para senhas.
+
+### Pilar 2 — Arquitetura e Design
+- SOLID: seguir os cinco principios em codigo orientado a objetos.
+- Clean Architecture: desacoplar regras de negocio de detalhes tecnicos.
+- DRY: abstrair logica duplicada em funcoes/modulos reutilizaveis.
+- KISS: preferir a solucao mais simples antes de super-otimizar.
+
+### Pilar 3 — Qualidade do Codigo
+- Nomes semanticos: variaveis e funcoes devem descrever claramente sua intencao.
+- Testes automatizados (piramide): unitarios (70%), integracao (20%), E2E (10%).
+- Code reviews: todo PR deve ter pelo menos uma revisao antes do merge.
+
+### Pilar 4 — DevOps e Observabilidade
+- CI/CD: automatizar builds, testes e deploys.
+- Logs e Monitoramento: o sistema deve alertar antes que o cliente perceba falha.
+- Infraestrutura como Codigo (IaC): servidores e containers definidos como codigo.
+"@
+            Add-Content -Path $constitutionPath -Value $pillarsSection -Encoding UTF8
+            Write-Ok "specs/memory/constitution.md: Engineering Pillars adicionados"
+        } else {
+            Write-Info "specs/memory/constitution.md: Engineering Pillars ja presentes — sem alteracao"
+        }
+    } else {
+        Write-Warn "specs/memory/constitution.md nao encontrado — pulando atualizacao de constitution."
+    }
+
+    # 5. Exibir checklist
+    Write-Host ""
+    Write-Host "  ============================================================" -ForegroundColor DarkYellow
+    Write-Host "  ENGINEERING PILLARS — Checklist obrigatorio antes do deploy" -ForegroundColor DarkYellow
+    Write-Host "  ============================================================" -ForegroundColor DarkYellow
+    Write-Host "  Ref: skills/engineering-pillars.md" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  [SEGURANCA - Security by Design]" -ForegroundColor Red
+    Write-Host "    [ ] Sem secrets/credenciais hardcoded no codigo" -ForegroundColor White
+    Write-Host "    [ ] Todo input externo validado e sanitizado" -ForegroundColor White
+    Write-Host "    [ ] Queries parametrizadas (sem concatenacao de strings)" -ForegroundColor White
+    Write-Host "    [ ] Principio do menor privilegio aplicado" -ForegroundColor White
+    Write-Host "    [ ] CORS com origens explicitas; erros sem stack trace em producao" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  [ARQUITETURA - Clean Architecture + SOLID]" -ForegroundColor Cyan
+    Write-Host "    [ ] Regras de negocio no service/use-case (nao no controller)" -ForegroundColor White
+    Write-Host "    [ ] Entity nao exposta diretamente na API (usar DTO)" -ForegroundColor White
+    Write-Host "    [ ] Dependencias injetadas via constructor (sem new direto)" -ForegroundColor White
+    Write-Host "    [ ] Sem logica duplicada (DRY aplicado)" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  [QUALIDADE - Codigo e Testes]" -ForegroundColor Magenta
+    Write-Host "    [ ] Variaveis e funcoes com nomes descritivos e semanticos" -ForegroundColor White
+    Write-Host "    [ ] Testes unitarios para toda logica de negocio" -ForegroundColor White
+    Write-Host "    [ ] Testes de integracao para fluxos criticos" -ForegroundColor White
+    Write-Host "    [ ] Code review antes de merge" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  [DEVOPS - CI/CD e Observabilidade]" -ForegroundColor Green
+    Write-Host "    [ ] Pipeline CI configurado (.github/workflows/ci.yml)" -ForegroundColor White
+    Write-Host "    [ ] Health check endpoint implementado (se API)" -ForegroundColor White
+    Write-Host "    [ ] Logs estruturados com nivel e contexto" -ForegroundColor White
+    Write-Host "    [ ] Configuracoes via variaveis de ambiente" -ForegroundColor White
+    Write-Host "  ============================================================" -ForegroundColor DarkYellow
+    Write-Host ""
+    Write-Ok "update-pillars concluido. Execute em cada projeto existente com:"
+    Write-Info ("  .\iagents-factory.ps1 update-pillars <caminho-do-projeto>")
+}
+
 # --- MAIN DISPATCHER ----------------------------------------
 
 switch ($Command) {
@@ -1798,9 +1937,10 @@ switch ($Command) {
     "projects"     { Invoke-Projects }
     "export"       { Invoke-Export }
     "import"       { Invoke-Import -FilePath $Arg1 }
-    "cleanup"      { Invoke-Cleanup }
-    "dashboard"    { Invoke-Dashboard }
-    "help"         { Invoke-Help }
-    default        { Invoke-Help }
+    "cleanup"       { Invoke-Cleanup }
+    "dashboard"     { Invoke-Dashboard }
+    "update-pillars" { Invoke-UpdatePillars -TargetPath $Arg1 }
+    "help"          { Invoke-Help }
+    default         { Invoke-Help }
 }
 

@@ -934,3 +934,35 @@ Invoke-FactoryWorkflow -Context $context
 Write-Ok 'Projeto bootstrapado com sucesso.'
 Write-Info 'O projeto ja saiu registrado, com SPEC inicial, docs, scaffold tecnico e contexto para os agentes.'
 Write-Info ("Proximo passo: abra a pasta {0} no VS Code e continue a feature a partir de specs/." -f $context.ProjectDir)
+
+Write-Host ""
+Write-Host "  ============================================================" -ForegroundColor DarkYellow
+Write-Host "  ENGINEERING PILLARS — Checklist obrigatorio antes do deploy" -ForegroundColor DarkYellow
+Write-Host "  ============================================================" -ForegroundColor DarkYellow
+Write-Host "  Ref: skills/engineering-pillars.md" -ForegroundColor DarkGray
+Write-Host ""
+Write-Host "  [SEGURANCA - Security by Design]" -ForegroundColor Red
+Write-Host "    [ ] Sem secrets/credenciais hardcoded no codigo" -ForegroundColor White
+Write-Host "    [ ] Todo input externo validado e sanitizado" -ForegroundColor White
+Write-Host "    [ ] Queries parametrizadas (sem concatenacao de strings)" -ForegroundColor White
+Write-Host "    [ ] Principio do menor privilegio aplicado" -ForegroundColor White
+Write-Host "    [ ] CORS com origens explicitas; erros sem stack trace em producao" -ForegroundColor White
+Write-Host ""
+Write-Host "  [ARQUITETURA - Clean Architecture + SOLID]" -ForegroundColor Cyan
+Write-Host "    [ ] Regras de negocio no service/use-case (nao no controller)" -ForegroundColor White
+Write-Host "    [ ] Entity nao exposta diretamente na API (usar DTO)" -ForegroundColor White
+Write-Host "    [ ] Dependencias injetadas via constructor (sem new direto)" -ForegroundColor White
+Write-Host "    [ ] Sem logica duplicada (DRY aplicado)" -ForegroundColor White
+Write-Host ""
+Write-Host "  [QUALIDADE - Codigo e Testes]" -ForegroundColor Magenta
+Write-Host "    [ ] Variaveis e funcoes com nomes descritivos e semanticos" -ForegroundColor White
+Write-Host "    [ ] Testes unitarios para toda logica de negocio" -ForegroundColor White
+Write-Host "    [ ] Testes de integracao para fluxos criticos" -ForegroundColor White
+Write-Host "    [ ] Code review antes de merge" -ForegroundColor White
+Write-Host ""
+Write-Host "  [DEVOPS - CI/CD e Observabilidade]" -ForegroundColor Green
+Write-Host "    [ ] Pipeline CI configurado (.github/workflows/ci.yml)" -ForegroundColor White
+Write-Host "    [ ] Health check endpoint implementado (se API)" -ForegroundColor White
+Write-Host "    [ ] Logs estruturados com nivel e contexto" -ForegroundColor White
+Write-Host "    [ ] Configuracoes via variaveis de ambiente" -ForegroundColor White
+Write-Host "  ============================================================" -ForegroundColor DarkYellow
