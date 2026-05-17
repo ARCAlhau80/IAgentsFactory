@@ -34,7 +34,7 @@
 
 param(
     [Parameter(Position=0)]
-    [ValidateSet("init","register","constitution","specify","plan","tasks","analyze","capture","search","search-cross","stats","projects","export","import","cleanup","dashboard","update-pillars","ask","hermes-status","hermes-update","hermes-provision","embed-index","help")]
+    [ValidateSet("init","register","constitution","specify","plan","tasks","analyze","capture","search","search-cross","stats","projects","export","import","cleanup","dashboard","update-pillars","ask","hermes-status","hermes-update","hermes-provision","embed-index","update-mcp","help")]
     [string]$Command = "help",
 
     [Parameter(Position=1)]
@@ -1795,6 +1795,7 @@ function Invoke-Help {
     Write-Host '    hermes-update            Atualiza Hermes para a ultima versao' -ForegroundColor White
     Write-Host '    hermes-provision [path]  Provisiona subagente Hermes em projetos existentes' -ForegroundColor White
     Write-Host '    embed-index              Gera embeddings vetoriais para busca semantica (Layer 1b)' -ForegroundColor White
+    Write-Host '    update-mcp [path]        Injeta .vscode/mcp.json em todos os projetos registrados' -ForegroundColor White
     Write-Host '    help                     Este menu' -ForegroundColor White
     Write-Host ''
     Write-Host '  FLAGS:' -ForegroundColor Yellow
@@ -2130,6 +2131,90 @@ hermes_context: enabled
     }
 }
 
+# --- UPDATE-MCP COMMAND --------------------------------------
+
+function Invoke-UpdateMcp {
+    param([string]$TargetPath)
+
+    Write-Title "Update-MCP  -  Injetar .vscode/mcp.json nos projetos"
+
+    $serverJs = Join-Path $PSScriptRoot "tools\mcp-knowledge-hub\server.js"
+    if (-not (Test-Path $serverJs)) {
+        Write-Err "MCP server nao encontrado: $serverJs"
+        Write-Info "Execute primeiro: git pull (para obter tools/mcp-knowledge-hub/server.js)"
+        return
+    }
+
+    $mcpContent = @"
+{
+    "servers": {
+        "iagents-knowledge-hub": {
+            "type": "stdio",
+            "command": "node",
+            "args": ["$($serverJs.Replace('\\', '\\\\'))"],
+            "env": {}
+        }
+    }
+}
+"@
+
+    $targets = @()
+    if ($TargetPath) {
+        if (-not (Test-Path $TargetPath)) {
+            Write-Err "Caminho nao encontrado: $TargetPath"
+            return
+        }
+        $targets += [pscustomobject]@{ Name = (Split-Path -Leaf $TargetPath); Path = (Resolve-Path $TargetPath).Path }
+    } else {
+        $rows = Invoke-Sql -Query 'SELECT name, path FROM factory_projects WHERE is_active = 1 ORDER BY name;'
+        foreach ($row in @($rows)) {
+            if (-not $row) { continue }
+            $cols = [string]$row -split '\|', 2
+            if ($cols.Count -lt 2 -or -not $cols[1]) { continue }
+            $targets += [pscustomobject]@{ Name = $cols[0].Trim(); Path = $cols[1].Trim() }
+        }
+    }
+
+    if ($targets.Count -eq 0) {
+        Write-Warn "Nenhum projeto encontrado. Use: .\iagents-factory.ps1 register [caminho]"
+        return
+    }
+
+    $updated = 0
+    $skipped = 0
+    $errors  = 0
+
+    foreach ($proj in $targets) {
+        if (-not (Test-Path $proj.Path)) {
+            Write-Warn "  [SKIP] $($proj.Name) - caminho nao existe: $($proj.Path)"
+            $skipped++
+            continue
+        }
+        try {
+            $vscodeDir = Join-Path $proj.Path ".vscode"
+            if (-not (Test-Path $vscodeDir)) {
+                New-Item -ItemType Directory -Path $vscodeDir -Force | Out-Null
+            }
+            $mcpFile = Join-Path $vscodeDir "mcp.json"
+            Set-Content -Path $mcpFile -Value $mcpContent -Encoding UTF8
+            Write-Ok "  $($proj.Name)  ->  $($proj.Path)\.vscode\mcp.json"
+            $updated++
+        } catch {
+            Write-Warn "  [ERR] $($proj.Name) : $_"
+            $errors++
+        }
+    }
+
+    Write-Host ""
+    Write-Ok "Concluido. Atualizados: $updated | Ignorados: $skipped | Erros: $errors"
+    Write-Host ""
+    Write-Host "  Proximos passos:" -ForegroundColor Yellow
+    Write-Host "    1. Abra cada projeto no VS Code" -ForegroundColor White
+    Write-Host "    2. Aceite o prompt 'Start MCP Server' (aparece automaticamente)" -ForegroundColor White
+    Write-Host "    3. Em Agent mode, o Copilot chamara search_knowledge_hub automaticamente" -ForegroundColor White
+    Write-Host ""
+}
+
 # --- HERMES-UPDATE COMMAND ------------------------------------
 
 function Invoke-HermesUpdate {
@@ -2166,6 +2251,7 @@ switch ($Command) {
     "hermes-update"    { Invoke-HermesUpdate }
     "hermes-provision" { Invoke-HermesProvision -TargetPath $Arg1 }
     "embed-index"      { Invoke-EmbedIndex }
+    "update-mcp"       { Invoke-UpdateMcp -TargetPath $Arg1 }
     "help"             { Invoke-Help }
     default         { Invoke-Help }
 }

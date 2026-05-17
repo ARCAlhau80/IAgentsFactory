@@ -687,6 +687,29 @@ foreach ($folder in $folders) {
     }
 }
 
+# --- 5b. Inject .vscode/mcp.json (Knowledge Hub MCP) ---------
+$mcpServerJs = Join-Path $TemplatePath "tools\mcp-knowledge-hub\server.js"
+if (Test-Path $mcpServerJs) {
+    $vscodeDir = Join-Path $targetDir ".vscode"
+    if (-not (Test-Path $vscodeDir)) { New-Item -ItemType Directory -Path $vscodeDir -Force | Out-Null }
+    $mcpFile = Join-Path $vscodeDir "mcp.json"
+    $escapedPath = $mcpServerJs.Replace('\', '\\')
+    $mcpJson = @"
+{
+    "servers": {
+        "iagents-knowledge-hub": {
+            "type": "stdio",
+            "command": "node",
+            "args": ["$escapedPath"],
+            "env": {}
+        }
+    }
+}
+"@
+    Set-Content -Path $mcpFile -Value $mcpJson -Encoding UTF8
+    Write-Host "    OK: .vscode/mcp.json (Knowledge Hub MCP)" -ForegroundColor Green
+}
+
 # --- 6. Replace placeholders ---------------------------------
 Write-Host ""
 Write-Host "  Substituindo placeholders..." -ForegroundColor Green
