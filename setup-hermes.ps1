@@ -468,6 +468,19 @@ Register-AutoUpdateTask
 Register-SyncTask
 Show-Status
 
+# Provisionar hermes-project.yaml em todos os projetos ja registrados na factory
+$factoryScript = Join-Path $PSScriptRoot "iagents-factory.ps1"
+if (Test-Path $factoryScript) {
+    Write-Host "  Provisionando subagente Hermes em projetos registrados..." -ForegroundColor Cyan
+    try {
+        & $factoryScript hermes-provision 2>&1 | ForEach-Object { Write-Host "    $_" -ForegroundColor DarkGray }
+        Write-Log "INFO" "hermes-provision executado durante setup"
+    } catch {
+        Write-Host "  [WARN] hermes-provision falhou: $_" -ForegroundColor Yellow
+        Write-Log "WARN" "hermes-provision erro durante setup: $_"
+    }
+}
+
 Write-Host ""
 Write-Host "  ======================================================" -ForegroundColor Green
 Write-Host "  Setup concluido!" -ForegroundColor Green

@@ -305,3 +305,16 @@ Send-Notification "IAgentsFactory: Hermes atualizado para $newVersion"
 
 Write-Ok "Update concluido. Versao ativa: $newVersion"
 Write-Log "INFO" "Update concluido: $newVersion"
+
+# Provisionar hermes-project.yaml em projetos registrados que ainda nao possuem
+$factoryScript = Join-Path $PSScriptRoot "iagents-factory.ps1"
+if (Test-Path $factoryScript) {
+    Write-U "Provisionando subagente Hermes em projetos registrados..."
+    try {
+        & $factoryScript hermes-provision 2>&1 | ForEach-Object { Write-Info $_ }
+        Write-Log "INFO" "hermes-provision executado apos update"
+    } catch {
+        Write-Warn "hermes-provision falhou: $_"
+        Write-Log "WARN" "hermes-provision erro: $_"
+    }
+}
