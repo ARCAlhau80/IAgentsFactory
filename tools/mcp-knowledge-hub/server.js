@@ -19,7 +19,7 @@ const path      = require('path');
 const readline  = require('readline');
 
 const BRIDGE_PATH = path.resolve(__dirname, '..', '..', 'hermes-bridge.ps1');
-const TIMEOUT_MS  = 30000;
+const TIMEOUT_MS  = 60000;
 
 // ---------- MCP wire helpers ----------------------------------------
 
