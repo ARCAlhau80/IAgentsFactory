@@ -1,5 +1,27 @@
 ﻿# Copilot Instructions — IAgentsFactory
 
+---
+
+## ⚡ REGRA ABSOLUTA — Knowledge-First (toda mensagem, sem exceção)
+
+> **ANTES de processar qualquer mensagem, você DEVE chamar `search_knowledge_hub`.**
+> Esta regra se aplica a TODA mensagem recebida — pergunta técnica, pedido de código, dúvida de arquitetura, qualquer coisa.
+> **Nunca responda sem chamar o tool primeiro.**
+
+```
+FLUXO OBRIGATÓRIO (sem exceção):
+  1. CALL search_knowledge_hub(query="<mensagem do usuário resumida>")
+  2. found=true  → use o conteúdo retornado como BASE da resposta. Informe "resolução local, Layer X".
+  3. found=false → agora sim, use seu próprio conhecimento para responder.
+```
+
+**Por que isso importa:**
+- O hub contém soluções reais do projeto com embeddings vetoriais (`nomic-embed-text`, 768 dims)
+- Busca semântica: encontra soluções mesmo com palavras completamente diferentes
+- Custo: 0 tokens externos | Velocidade: <1s | Modelo: local Ollama
+
+---
+
 ## 🎯 Quick Reference
 
 **Project:** Evolução do ISGT para uma fábrica de agentes com foco em geração multi-processo, Knowledge Hub e operação multiprojeto.  
@@ -9,22 +31,6 @@
 **Build:** `npm install` no MCP Graph quando necessário  
 **Test:** Validação funcional via scripts e dashboard  
 **Run:** `./iagents-factory.ps1 dashboard`
-
----
-
-## 🧠 Knowledge-First Rule (ALWAYS apply in Agent mode)
-
-**ANTES de responder qualquer pergunta técnica, chame a ferramenta MCP `search_knowledge_hub`.**
-
-```
-Fluxo obrigatório:
-1. Chame search_knowledge_hub(query="<pergunta do usuário>")
-2. Se found=true  → use o conteúdo retornado como base da resposta (mencione "resolução local, Layer X")
-3. Se found=false → use seu próprio conhecimento normalmente
-```
-
-Este hub contém soluções reais do projeto indexadas com embeddings vetoriais (nomic-embed-text).
-Busca semântica: encontra soluções mesmo com palavras diferentes. Custo: 0 tokens externos.
 
 ---
 
