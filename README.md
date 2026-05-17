@@ -4,8 +4,8 @@
 **Origem:** Evolução do ISGT, que permanece como ADK base e referência de templates.  
 **Posicionamento:** `IAgentsFactory` é um produto separado, com identidade própria, voltado para orquestração, captura de conhecimento e execução multi-projeto.
 
-**Versão:** 3.0.0 — Hermes Edition  
-**Maio 2026 — Novidade:** integração do **Hermes Agent local** (Nous Research) criando resolução em 3 camadas: Knowledge Hub → Hermes+Ollama → Provider externo. Zero custo externo para consultas recorrentes.
+**Versão:** 3.1.0 — Ollama Edition
+**Maio 2026 — Novidade:** Layer 2 migrada de Hermes CLI (WSL2) para **Ollama Windows nativo** (`localhost:11434`). Zero WSL2, zero configuração extra — se o Ollama estiver rodando, a camada local já funciona.
 
 ---
 
@@ -20,7 +20,7 @@
 ║  CAMADA 1 → Knowledge Hub local (SQLite FTS5)              ║
 ║             0 tokens │ < 0.1s │ threshold ≥ 0.75           ║
 ║             ↓ sem match suficiente?                        ║
-║  CAMADA 2 → Hermes Agent + Ollama (local, WSL2)            ║
+║  CAMADA 2 → Ollama Windows nativo (localhost:11434)        ║
 ║             0 custo externo │ timeout 90s │ auto-captura   ║
 ║             ↓ timeout ou falha?                            ║
 ║  CAMADA 3 → Provider externo (Claude / GPT)                ║
@@ -130,23 +130,23 @@ O wizard coleta contexto de negocio, consulta a base local quando possivel, suge
 .\iagents-factory.ps1 stats
 ```
 
-### 5.1. Consulta com IA local (Hermes)
+### 5.1. Consulta com IA local (Ollama)
 ```powershell
-# Instalar Hermes (necessário apenas uma vez, ~5-15 min)
-.\setup-hermes.ps1 -Auto
+# Verificar se Ollama está rodando e qual modelo está ativo
+.\iagents-factory.ps1 hermes-status
 
-# Consulta com resolução 3 camadas
+# Consulta com resolução 3 camadas (Hub → Ollama → Externo)
 .\iagents-factory.ps1 ask "como implementar paginação em NestJS"
 
 # Consulta com contexto de domínio
 .\iagents-factory.ps1 ask "padrão repository em Java" -Domain backend -Language java
 
-# Verificar status do agente local
-.\iagents-factory.ps1 hermes-status
-
-# Atualizar Hermes para última versão
-.\iagents-factory.ps1 hermes-update
+# Kill switch (pula Ollama, vai direto para externo)
+$env:HERMES_DISABLED = "1"
 ```
+
+> O modelo ativo é configurado em `config/hermes-config.json` → `local_model.model`.
+> Para trocar de modelo: `ollama pull nome-do-modelo` e atualizar o config.
 
 ### 6. Dashboards
 ```powershell
@@ -215,8 +215,8 @@ IAgentsFactory/
 │   └── extensions/                  ← Regras extras para o gate analyze
 ├── setup-hermes.ps1                 ← Auto-install Hermes + Ollama + Task Scheduler
 ├── hermes-bridge.ps1                ← Orquestrador 3 camadas (motor do comando ask)
-├── hermes-sync.ps1                  ← Sync bidirecional Hermes ↔ Knowledge Hub
-├── hermes-update.ps1                ← Auto-update com backup e rollback
+├── hermes-sync.ps1                  ← Sync Knowledge Hub ↔ Ollama memory
+├── hermes-update.ps1                ← Auto-update Ollama + provision de projetos
 ├── .mcp.json                        ← Integração MCP Graph Workflow
 ├── new-project.bat                  ← Entry-point do wizard de bootstrap
 ├── new-project.ps1                  ← Wizard greenfield/existente da factory
@@ -265,9 +265,10 @@ IAgentsFactory/
 | `import [file]` | Importa knowledge de outro dev |
 | `cleanup` | Remove soluções depreciadas |
 | `dashboard` | Abre dashboard da Factory ligado ao knowledge.db |
-| **`ask "pergunta"`** | **Consulta 3 camadas: Hub → Hermes → Externo (custo mínimo)** |
-| `hermes-status` | Verifica status do Hermes Agent local |
-| `hermes-update` | Atualiza Hermes para a última versão |
+| **`ask "pergunta"`** | **Consulta 3 camadas: Hub → Ollama local → Externo (custo mínimo)** |
+| `hermes-status` | Verifica status do Ollama (modelo ativo, URL, disponibilidade) |
+| `hermes-update` | Atualiza Ollama, provisiona projetos registrados |
+| `hermes-provision [path]` | Cria contexto Hermes para projetos existentes |
 | `update-pillars [path]` | Aplica Engineering Pillars em projeto existente |
 
 ### Dashboards Disponiveis
@@ -341,37 +342,47 @@ tags: roi, investment
 
 ---
 
-## 🤖 Hermes Agent — IA Local Integrada
+## 🤖 IA Local — Ollama Windows Nativo
 
 ### O que é
-Hermes Agent (Nous Research, MIT) é um agente autônomo que roda **dentro do WSL2** no seu Windows, usando modelos **Ollama locais** (llama3.2:3b por padrão) — sem enviar dados para fora da máquina, sem custo por token.
+A **Layer 2** da factory usa o **Ollama Windows** (`http://localhost:11434`) como motor de inferência local — sem WSL2, sem configuração adicional. Se o Ollama estiver rodando na bandeja do sistema, a camada já está ativa.
 
-### Instalação (única vez)
-```powershell
-.\setup-hermes.ps1 -Auto
-# Instala WSL2, Hermes, Ollama, modelo llama3.2:3b (~2GB)
-# Registra 2 tarefas no Task Scheduler (update 06:00 + sync 06:30)
+**Modelo atual:** `gpt-oss:20b` (20.9B parâmetros, MXFP4) — configurado em `config/hermes-config.json`.
+
+### Por que não é o Ollama que "aprende"
+O Ollama é **stateless** — cada chamada é independente. O **aprendizado** acontece no **Knowledge Hub (SQLite)**: toda resposta do Ollama é capturada com SHA-256 e indexada no FTS5. Na próxima consulta similar, a Layer 1 responde direto do Hub — o Ollama nem chega a ser chamado.
+
+```
+Ollama responde → capturado no knowledge.db → próxima vez: Layer 1 (0 tokens)
 ```
 
 ### Uso
 ```powershell
+.\iagents-factory.ps1 hermes-status   # checar se Ollama está rodando
 .\iagents-factory.ps1 ask "como estruturar um serviço de autenticação"
 .\iagents-factory.ps1 ask "padrão CQRS em NestJS" -Domain backend -Framework nestjs
-.\iagents-factory.ps1 hermes-status    # checar saúde
-.\iagents-factory.ps1 hermes-update    # atualizar
 ```
 
-### Kill switch (para debug)
+### Trocar de modelo
 ```powershell
-$env:HERMES_DISABLED = "1"  # pula camada Hermes, vai direto para externo
+# 1. Baixar novo modelo
+ollama pull llama3.3:70b
+
+# 2. Atualizar config
+# Edite: config/hermes-config.json → local_model.model = "llama3.3:70b"
+# Copie para: ~/.iagents-factory/hermes-config.json
+```
+
+### Kill switch
+```powershell
+$env:HERMES_DISABLED = "1"  # pula Layer 2, vai direto para externo
 $env:HERMES_DISABLED = "0"  # volta ao normal
 ```
 
 ### Pré-requisitos
-- Windows 10/11 com WSL2
-- 8 GB RAM (mínimo)
-- 4+ GB disco livre
-- Acesso à internet apenas na instalação inicial
+- [Ollama para Windows](https://ollama.com/download/windows) instalado e rodando
+- Modelo instalado: `ollama pull gpt-oss:20b` (ou qualquer outro)
+- WSL2 **não é necessário**
 
 > Guia completo: [skills/hermes-integration.md](skills/hermes-integration.md)
 
@@ -379,10 +390,11 @@ $env:HERMES_DISABLED = "0"  # volta ao normal
 
 ## 🔗 Integrações
 
-### Hermes Agent + Ollama (LOCAL — Novo)
-- Agente autônomo rodando no WSL2 com modelo local
-- Camada 2 de resolução: 0 custo externo, privacidade total
-- Auto-update e sincronização de memória via Task Scheduler
+### Ollama Windows Nativo (Layer 2 — Local)
+- Motor de inferência local via HTTP (`localhost:11434`)
+- Sem WSL2, sem Hermes CLI — direto no Windows
+- Modelo configurável: qualquer modelo Ollama instalado
+- Camada 2 de resolução: 0 custo externo, privacidade total, aprendizado capturado no Hub
 
 ### MCP Graph Workflow
 - Banco SQLite WAL + FTS5 para busca full-text

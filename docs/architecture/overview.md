@@ -2,7 +2,7 @@
 
 **Propósito:** visão técnica consolidada do produto e do fluxo de especificação leve  
 **Nível:** Técnico — Arquitetos, mantenedores e agentes de automação  
-**Versão:** 3.0.0 — Hermes Edition (Maio 2026)
+**Versão:** 3.1.0 — Ollama Edition (Maio 2026)
 
 ---
 
@@ -12,7 +12,7 @@
 ENTRADA:   demandas de código, arquitetura, operação e reuso entre projetos
 DESAFIO:   evitar retrabalho, custo com tokens externos e dependência total de provedores pagos
 PROBLEMA:  conhecimento valioso se perde entre sessões e entre repositórios
-RESULTADO: knowledge hub local + agente IA local (Hermes) + workflow SPEC leve + operação multiprojeto
+RESULTADO: knowledge hub local + Ollama Windows nativo (Layer 2) + workflow SPEC leve + operação multiprojeto
 ESCALA:    uso local-first, sem infra cloud, vários repositórios, múltiplos agentes
 ```
 
@@ -36,9 +36,9 @@ ESCALA:    uso local-first, sem infra cloud, vários repositórios, múltiplos a
 │  LOCAL INTELLIGENCE — 3-Layer Resolution             │
 │  ├─ Camada 1: Knowledge Hub FTS5 (0 tokens, <0.1s)  │
 │  │            threshold ≥ 0.75, dedup SHA-256        │
-│  ├─ Camada 2: Hermes Agent + Ollama (WSL2)           │
-│  │            0 custo externo, timeout 90s           │
-│  │            auto-captura no Hub após resposta      │
+  ├─ Camada 2: Ollama Windows nativo (localhost:11434)    │
+  │            0 custo externo, timeout 90s               │
+  │            auto-captura no Hub após resposta          │
 │  ├─ Camada 3: Provider externo (Claude/GPT)          │
 │  │            custo medido, resposta capturada       │
 │  └─ hermes-bridge.ps1 orquestra o fluxo              │
@@ -76,9 +76,9 @@ ESCALA:    uso local-first, sem infra cloud, vários repositórios, múltiplos a
 2. hermes-bridge verifica Knowledge Hub local (camada 1, FTS5)
    │ score ≥ 0.75 → retorna imediatamente (0 tokens)
    │ score < 0.75 ↓
-3. hermes-bridge consulta Hermes + Ollama via WSL2 (camada 2)
+3. hermes-bridge consulta Ollama Windows via HTTP localhost:11434 (camada 2)
    │ resposta → auto-captura no Hub → retorna (0 custo externo)
-   │ timeout / falha ↓
+   │ timeout / Ollama indisponível ↓
 4. hermes-bridge escala para provider externo (camada 3)
    │ resposta capturada no Hub para reutilização futura
    │
@@ -90,7 +90,7 @@ ESCALA:    uso local-first, sem infra cloud, vários repositórios, múltiplos a
    │
 8. Artefatos e soluções são publicados no Knowledge Hub
    │
-9. Task Scheduler mantém Hermes atualizado e sincronizado (diário)
+9. hermes-update provisiona projetos registrados e mantém config atualizado (diário)
 ```
 
 ---
@@ -126,11 +126,8 @@ reuse_log
 solutions_fts
   - índice FTS5 para busca textual (virtual table)
 
-hermes_sessions         ← NOVO (Hermes Edition)
-  - sessões do Hermes: query, camada usada, tempo de resposta
-
-hermes_escalations      ← NOVO (Hermes Edition)
-  - registra quando precisou de provider externo (métricas de economia)
+hermes_sessions         ← sessões do bridge: query, camada usada, tempo de resposta
+hermes_escalations      ← registra quando precisou de provider externo (métricas de economia)
 ```
 
 ---
