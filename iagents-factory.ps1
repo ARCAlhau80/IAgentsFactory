@@ -25,6 +25,7 @@
 #   .\iagents-factory.ps1 ask "pergunta"           -> Consulta 3 camadas: Hub local -> Hermes -> Externo
 #   .\iagents-factory.ps1 hermes-status            -> Verifica status do Hermes Agent local
 #   .\iagents-factory.ps1 hermes-update            -> Atualiza Hermes para a ultima versao
+#   .\iagents-factory.ps1 hermes-provision [path]   -> Provisiona subagente Hermes em projetos existentes
 #
 # REQUER:
 #   - Node.js (para MCP Graph Workflow)
@@ -33,7 +34,7 @@
 
 param(
     [Parameter(Position=0)]
-    [ValidateSet("init","register","constitution","specify","plan","tasks","analyze","capture","search","search-cross","stats","projects","export","import","cleanup","dashboard","update-pillars","ask","hermes-status","hermes-update","help")]
+    [ValidateSet("init","register","constitution","specify","plan","tasks","analyze","capture","search","search-cross","stats","projects","export","import","cleanup","dashboard","update-pillars","ask","hermes-status","hermes-update","hermes-provision","help")]
     [string]$Command = "help",
 
     [Parameter(Position=1)]
@@ -1784,6 +1785,7 @@ function Invoke-Help {
     Write-Host '    ask "pergunta"           Consulta 3 camadas: Hub -> Hermes -> Externo' -ForegroundColor White
     Write-Host '    hermes-status            Verifica status do Hermes Agent local' -ForegroundColor White
     Write-Host '    hermes-update            Atualiza Hermes para a ultima versao' -ForegroundColor White
+    Write-Host '    hermes-provision [path]  Provisiona subagente Hermes em projetos existentes' -ForegroundColor White
     Write-Host '    help                     Este menu' -ForegroundColor White
     Write-Host ''
     Write-Host '  FLAGS:' -ForegroundColor Yellow
@@ -1817,6 +1819,8 @@ function Invoke-Help {
     Write-Host '    .\iagents-factory.ps1 ask "padrao de repositorio em java" -Domain backend -Language java' -ForegroundColor DarkGray
     Write-Host '    .\iagents-factory.ps1 hermes-status' -ForegroundColor DarkGray
     Write-Host '    .\iagents-factory.ps1 hermes-update' -ForegroundColor DarkGray
+    Write-Host '    .\iagents-factory.ps1 hermes-provision           # todos os projetos registrados' -ForegroundColor DarkGray
+    Write-Host '    .\iagents-factory.ps1 hermes-provision C:\meu-proj  # projeto especifico' -ForegroundColor DarkGray
     Write-Host ''
 }
 
@@ -1991,6 +1995,90 @@ function Invoke-HermesStatus {
     & $setupPath -CheckOnly
 }
 
+# --- HERMES-PROVISION COMMAND --------------------------------
+
+function Invoke-HermesProvision {
+    param([string]$TargetPath)
+
+    Write-Title "Hermes Provision — Subagentes por Projeto"
+
+    $hermesProjectsDir = Join-Path $env:USERPROFILE ".iagents-factory\hermes-projects"
+    if (-not (Test-Path $hermesProjectsDir)) {
+        New-Item -ItemType Directory -Path $hermesProjectsDir -Force | Out-Null
+    }
+
+    $provisioned = 0
+    $skipped     = 0
+
+    # Modo: projeto especifico via path ou nome
+    if ($TargetPath) {
+        $rows = Invoke-Sql -Query "SELECT name, language, framework, path FROM factory_projects WHERE (path = '$($TargetPath.Replace("'","''"))' OR name = '$($TargetPath.Replace("'","''"))') AND is_active = 1 LIMIT 1;"
+        if (-not $rows) {
+            # Nao esta registrado — provisionar com dados do path
+            $name = Split-Path -Leaf $TargetPath
+            $rows = @("$name|||") # name sem lang/fw/path
+        }
+    } else {
+        # Todos os projetos registrados na factory
+        $rows = Invoke-Sql -Query 'SELECT name, language, framework, path FROM factory_projects WHERE is_active = 1 ORDER BY name;'
+    }
+
+    if (-not $rows) {
+        Write-Warn "Nenhum projeto registrado. Use: .\iagents-factory.ps1 register [caminho]"
+        return
+    }
+
+    foreach ($row in $rows) {
+        $cols  = [string]$row -split '\|'
+        $name  = $cols[0].Trim()
+        $lang  = if ($cols.Count -gt 1) { $cols[1].Trim() } else { "" }
+        $fw    = if ($cols.Count -gt 2) { $cols[2].Trim() } else { "" }
+        $path  = if ($cols.Count -gt 3) { $cols[3].Trim() } else { $TargetPath }
+
+        if (-not $name) { continue }
+
+        # Slug: letras, numeros, hifen
+        $slug = $name -replace '[^a-zA-Z0-9_-]','-'
+        $projDir  = Join-Path $hermesProjectsDir $slug
+        $yamlFile = Join-Path $projDir "hermes-project.yaml"
+
+        if (Test-Path $yamlFile) {
+            Write-Info "  [JA EXISTE] $name ($slug)"
+            $skipped++
+            continue
+        }
+
+        try {
+            New-Item -ItemType Directory -Path $projDir -Force | Out-Null
+            $yaml = @"
+project: $name
+slug: $slug
+language: $lang
+framework: $fw
+path: $path
+provisioned_at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+hermes_context: enabled
+"@
+            Set-Content -Path $yamlFile -Value $yaml -Encoding UTF8
+            Write-Ok "  Provisionado: $name  ->  hermes-projects/$slug/"
+            $provisioned++
+        } catch {
+            Write-Warn "  Erro ao provisionar $name : $_"
+        }
+    }
+
+    Write-Host ""
+    Write-Ok "Concluido. Provisionados: $provisioned | Ja existiam: $skipped"
+    Write-Info "Diretorio: $hermesProjectsDir"
+
+    if ($provisioned -gt 0) {
+        Write-Host ""
+        Write-Host "  Agora use:" -ForegroundColor Yellow
+        Write-Host "    .\iagents-factory.ps1 ask 'sua pergunta'" -ForegroundColor White
+        Write-Host "  O Hermes tera contexto especializado por projeto." -ForegroundColor DarkGray
+    }
+}
+
 # --- HERMES-UPDATE COMMAND ------------------------------------
 
 function Invoke-HermesUpdate {
@@ -2024,8 +2112,9 @@ switch ($Command) {
     "update-pillars" { Invoke-UpdatePillars -TargetPath $Arg1 }
     "ask"            { Invoke-Ask -QueryText $Arg1 }
     "hermes-status"  { Invoke-HermesStatus }
-    "hermes-update"  { Invoke-HermesUpdate }
-    "help"          { Invoke-Help }
+    "hermes-update"    { Invoke-HermesUpdate }
+    "hermes-provision" { Invoke-HermesProvision -TargetPath $Arg1 }
+    "help"             { Invoke-Help }
     default         { Invoke-Help }
 }
 
