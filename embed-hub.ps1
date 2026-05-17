@@ -149,10 +149,13 @@ $createTable = 'CREATE TABLE IF NOT EXISTS solution_embeddings (' +
 
 # Buscar solucoes para indexar
 if ($All) {
-    $selectSql = 'SELECT id, solution_summary, solution_content, prompt_used FROM learned_solutions WHERE is_deprecated = 0 ORDER BY quality_score DESC;'
+    $selectSql = "SELECT id, REPLACE(REPLACE(COALESCE(solution_summary,''),char(13),''),char(10),' '), REPLACE(REPLACE(COALESCE(solution_content,''),char(13),''),char(10),' '), REPLACE(REPLACE(COALESCE(prompt_used,''),char(13),''),char(10),' ') FROM learned_solutions WHERE is_deprecated = 0 ORDER BY quality_score DESC;"
     Write-E "Modo: re-indexar TODAS as solucoes"
 } else {
-    $selectSql = 'SELECT ls.id, ls.solution_summary, ls.solution_content, ls.prompt_used ' +
+    $selectSql = 'SELECT ls.id, ' +
+                 "REPLACE(REPLACE(COALESCE(ls.solution_summary,''),char(13),''),char(10),' '), " +
+                 "REPLACE(REPLACE(COALESCE(ls.solution_content,''),char(13),''),char(10),' '), " +
+                 "REPLACE(REPLACE(COALESCE(ls.prompt_used,''),char(13),''),char(10),' ') " +
                  'FROM learned_solutions ls ' +
                  'LEFT JOIN solution_embeddings se ON se.solution_id = ls.id ' +
                  'WHERE ls.is_deprecated = 0 AND se.solution_id IS NULL ' +
@@ -180,15 +183,16 @@ $erros = 0
 
 foreach ($row in $rowList) {
     $cols    = [string]$row -split '\|SEP\|', 4
-    $id      = $cols[0].Trim()
-    $summary = $cols[1].Trim()
-    $content = $cols[2].Trim()
-    $prompt  = if ($cols.Count -gt 3) { $cols[3].Trim() } else { "" }
+    $id      = if ($cols.Count -gt 0 -and $null -ne $cols[0]) { $cols[0].Trim() } else { "" }
+    $summary = if ($cols.Count -gt 1 -and $null -ne $cols[1]) { $cols[1].Trim() } else { "" }
+    $content = if ($cols.Count -gt 2 -and $null -ne $cols[2]) { $cols[2].Trim() } else { "" }
+    $prompt  = if ($cols.Count -gt 3 -and $null -ne $cols[3]) { $cols[3].Trim() } else { "" }
 
     if (-not $id) { continue }
 
     # Texto para embedding: summary + primeiros 500 chars do content
-    $textForEmbed = "$summary $($content.Substring(0, [Math]::Min(500, $content.Length)))"
+    $safeContent = if ($content.Length -gt 0) { $content.Substring(0, [Math]::Min(500, $content.Length)) } else { "" }
+    $textForEmbed = "$summary $safeContent"
     if ($prompt) { $textForEmbed = "$prompt $textForEmbed" }
 
     Write-E "[$($done+1)/$($rowList.Count)] $id ..."

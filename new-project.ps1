@@ -1,4 +1,4 @@
-# ===============================================================
+﻿# ===============================================================
 # IAgentsFactory - New Project Wizard
 #
 # Bootstrap greenfield/existing projects from business context,
@@ -953,7 +953,7 @@ hermes_context: enabled
         Write-Host "  [HERMES] Subagente Hermes provisionado para: $($context.ProjectName)" -ForegroundColor DarkCyan
         Write-Host "  [HERMES] Use: .\iagents-factory.ps1 ask 'sua pergunta' para consultas com custo zero" -ForegroundColor DarkCyan
     } catch {
-        # Hermes nao instalado — nao bloqueia o bootstrap
+        # Hermes nao instalado  -  nao bloqueia o bootstrap
     }
 }
 
@@ -963,7 +963,7 @@ Write-Info ("Proximo passo: abra a pasta {0} no VS Code e continue a feature a p
 
 Write-Host ""
 Write-Host "  ============================================================" -ForegroundColor DarkYellow
-Write-Host "  ENGINEERING PILLARS — Checklist obrigatorio antes do deploy" -ForegroundColor DarkYellow
+Write-Host "  ENGINEERING PILLARS  -  Checklist obrigatorio antes do deploy" -ForegroundColor DarkYellow
 Write-Host "  ============================================================" -ForegroundColor DarkYellow
 Write-Host "  Ref: skills/engineering-pillars.md" -ForegroundColor DarkGray
 Write-Host ""

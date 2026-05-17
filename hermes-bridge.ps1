@@ -1,4 +1,4 @@
-# ===============================================================
+﻿# ===============================================================
 # IAgentsFactory - Hermes Bridge (Fluxo 3 Camadas)
 #
 # Orquestra o fluxo de resolucao:
@@ -47,7 +47,7 @@ $DB_PATH       = Join-Path $FactoryDir "knowledge.db"
 $HermesConfig  = Join-Path $FactoryDir "hermes-config.json"
 $BridgeLog     = Join-Path $FactoryDir "bridge.log"
 
-# ── Helpers ─────────────────────────────────────────────────────
+# -- Helpers -----------------------------------------------------
 
 function Write-B   { param([string]$T) if (-not $Silent) { Write-Host "  [BRIDGE] $T" -ForegroundColor Magenta } }
 function Write-Ok  { param([string]$T) if (-not $Silent) { Write-Host "  [OK] $T" -ForegroundColor Green } }
@@ -96,7 +96,7 @@ function Invoke-SqlQuery {
     return & $sqlite $DB_PATH $Query 2>$null
 }
 
-# ── Embedding helpers ─────────────────────────────────────
+# -- Embedding helpers -------------------------------------
 
 function Get-EmbeddingFromOllama {
     param([string]$Text, [string]$Url, [string]$EmbedModel)
@@ -143,7 +143,9 @@ function Search-VectorHub {
     $sql = @"
 SELECT se.solution_id, se.embedding,
        ls.domain, ls.pattern, ls.language, ls.framework,
-       ls.solution_summary, ls.solution_content, ls.quality_score,
+       REPLACE(REPLACE(COALESCE(ls.solution_summary,''),char(13),''),char(10),' '),
+       REPLACE(REPLACE(COALESCE(ls.solution_content,''),char(13),''),char(10),' '),
+       ls.quality_score,
        ls.source_agent, ls.source_project
 FROM solution_embeddings se
 JOIN learned_solutions ls ON ls.id = se.solution_id
@@ -196,7 +198,7 @@ LIMIT 500;
     return $null
 }
 
-# ── Camada 1: Knowledge Hub local ───────────────────────────────
+# -- Camada 1: Knowledge Hub local -------------------------------
 
 function Search-LocalHub {
     param([string]$QueryText, [string]$DomainFilter, [string]$LangFilter)
@@ -257,7 +259,7 @@ LIMIT 3;
     }
 }
 
-# ── Camada 2: Ollama Windows nativo (HTTP) ───────────────────────
+# -- Camada 2: Ollama Windows nativo (HTTP) -----------------------
 
 function Invoke-HermesLocal {
     param([string]$QueryText, [string]$ProjectCtx, [int]$TimeoutSec)
@@ -275,7 +277,7 @@ function Invoke-HermesLocal {
     try {
         Invoke-RestMethod -Uri "$ollamaUrl/api/tags" -TimeoutSec 3 -ErrorAction Stop | Out-Null
     } catch {
-        Write-B "Ollama nao disponivel em $ollamaUrl — pulando Layer 2"
+        Write-B "Ollama nao disponivel em $ollamaUrl  -  pulando Layer 2"
         Write-Log "WARN" "Ollama inacessivel: $_"
         return $null
     }
@@ -299,7 +301,7 @@ function Invoke-HermesLocal {
 
         $content = [string]$resp.response
         if ([string]::IsNullOrWhiteSpace($content) -or $content.Length -lt 20) {
-            Write-B "Ollama retornou resposta muito curta — escalando"
+            Write-B "Ollama retornou resposta muito curta  -  escalando"
             return $null
         }
 
@@ -312,13 +314,13 @@ function Invoke-HermesLocal {
             ResolvedBy  = "ollama-windows"
         }
     } catch {
-        Write-Warn "Ollama erro: $_ — escalando para Layer 3"
+        Write-Warn "Ollama erro: $_  -  escalando para Layer 3"
         Write-Log "WARN" "Ollama erro: $_"
         return $null
     }
 }
 
-# ── Auto-captura no Knowledge Hub ───────────────────────────────
+# -- Auto-captura no Knowledge Hub -------------------------------
 
 function Save-ToHub {
     param(
@@ -334,7 +336,7 @@ function Save-ToHub {
 
     $sqlite = Get-SqliteCmd
     if (-not $sqlite) {
-        Write-Warn "sqlite3 nao disponivel — captura automatica ignorada"
+        Write-Warn "sqlite3 nao disponivel  -  captura automatica ignorada"
         return
     }
     if (-not (Test-Path $DB_PATH)) { return }
@@ -409,11 +411,11 @@ VALUES
     }
 }
 
-# ── MAIN ─────────────────────────────────────────────────────────
+# -- MAIN ---------------------------------------------------------
 
 $cfg = Get-Config
 $threshold      = [double]$cfg.resolution_flow.local_hub_threshold
-$vecThreshold   = [double](if ($cfg.resolution_flow.vector_hub_threshold) { $cfg.resolution_flow.vector_hub_threshold } else { 0.72 })
+$vecThreshold   = if ($cfg.resolution_flow.vector_hub_threshold) { [double]$cfg.resolution_flow.vector_hub_threshold } else { 0.72 }
 $hermesTimeout  = [int]$cfg.resolution_flow.hermes_local_timeout_seconds
 $autoCaptureHermes   = [bool]$cfg.resolution_flow.auto_capture_hermes_responses
 $autoCaptureExternal = [bool]$cfg.resolution_flow.auto_capture_external_responses
@@ -434,7 +436,7 @@ $result = $null
 $layerUsed = 0
 $startTime = Get-Date
 
-# ── LAYER 1a: Knowledge Hub FTS5 ────────────────────────────────
+# -- LAYER 1a: Knowledge Hub FTS5 --------------------------------
 if ($ForceLayer -eq 0 -or $ForceLayer -eq 1) {
     Write-B "Layer 1a: buscando no Knowledge Hub (FTS5 keywords)..."
     $hubResult = Search-LocalHub -QueryText $Query -DomainFilter $Domain -LangFilter $Language
@@ -446,14 +448,14 @@ if ($ForceLayer -eq 0 -or $ForceLayer -eq 1) {
         Write-Log "INFO" "Layer 1a resolveu: id=$($hubResult.Id) score=$($hubResult.QualityScore)"
     } else {
         if ($hubResult) {
-            Write-B "FTS5 abaixo do threshold ($([Math]::Round($hubResult.QualityScore,2)) < $threshold) — tentando busca vetorial"
+            Write-B "FTS5 abaixo do threshold ($([Math]::Round($hubResult.QualityScore,2)) < $threshold)  -  tentando busca vetorial"
         } else {
-            Write-B "Sem match FTS5 — tentando busca vetorial (semantica)"
+            Write-B "Sem match FTS5  -  tentando busca vetorial (semantica)"
         }
     }
 }
 
-# ── LAYER 1b: Knowledge Hub Vector Search ──────────────────────
+# -- LAYER 1b: Knowledge Hub Vector Search ----------------------
 if ($null -eq $result -and ($ForceLayer -eq 0 -or $ForceLayer -eq 1)) {
     Write-B "Layer 1b: busca vetorial (cosine similarity, threshold=$vecThreshold)..."
     $vecResult = Search-VectorHub -QueryText $Query -EmbedModel $embedModel `
@@ -465,11 +467,11 @@ if ($null -eq $result -and ($ForceLayer -eq 0 -or $ForceLayer -eq 1)) {
         Write-Ok "Resolucao VETORIAL LOCAL (sim=$([Math]::Round($vecResult.Similarity,3)), agent=$($vecResult.SourceAgent))"
         Write-Log "INFO" "Layer 1b resolveu via vector search: id=$($vecResult.Id) sim=$($vecResult.Similarity)"
     } else {
-        Write-B "Sem match vetorial — escalando para Layer 2 (Ollama)"
+        Write-B "Sem match vetorial  -  escalando para Layer 2 (Ollama)"
     }
 }
 
-# ── LAYER 2: Ollama Windows nativo ──────────────────────────────
+# -- LAYER 2: Ollama Windows nativo ------------------------------
 if ($null -eq $result -and ($ForceLayer -eq 0 -or $ForceLayer -eq 2)) {
     Write-B "Layer 2: consultando Ollama Windows (local, sem custo externo)..."
     $hermesResult = Invoke-HermesLocal -QueryText $Query -ProjectCtx $Project -TimeoutSec $hermesTimeout
@@ -486,17 +488,17 @@ if ($null -eq $result -and ($ForceLayer -eq 0 -or $ForceLayer -eq 2)) {
                 -LangHint $Language -FwHint $Framework -Layer 2
         }
     } else {
-        Write-B "Ollama nao resolveu — escalando para Layer 3 (provider externo)"
+        Write-B "Ollama nao resolveu  -  escalando para Layer 3 (provider externo)"
     }
 }
 
-# ── LAYER 3: Provider externo ────────────────────────────────────
+# -- LAYER 3: Provider externo ------------------------------------
 if ($null -eq $result -and ($ForceLayer -eq 0 -or $ForceLayer -eq 3)) {
     Write-B "Layer 3: encaminhando para provider externo..."
     Write-Warn "Esta consulta vai consumir tokens externos. Capture a resposta com:"
     Write-Info "  .\iagents-factory.ps1 capture"
     Write-Info "  ou use: .\capture-pipeline.ps1 -FromFile resposta.md"
-    Write-Log "INFO" "Layer 3 acionado — nenhuma camada local resolveu"
+    Write-Log "INFO" "Layer 3 acionado  -  nenhuma camada local resolveu"
 
     # Registra que precisou de external para essa query (para metricas)
     $sqlite = Get-SqliteCmd
@@ -513,7 +515,7 @@ if ($null -eq $result -and ($ForceLayer -eq 0 -or $ForceLayer -eq 3)) {
     $layerUsed = 3
 }
 
-# ── Output ───────────────────────────────────────────────────────
+# -- Output -------------------------------------------------------
 
 $elapsed = [Math]::Round(((Get-Date) - $startTime).TotalSeconds, 2)
 
@@ -529,9 +531,9 @@ if ($JsonOutput) {
 } else {
     if ($result -and $result.Content -ne "EXTERNAL_REQUIRED") {
         Write-Host ""
-        Write-Host "  ─── Resposta (Layer $layerUsed) ──────────────────────────────" -ForegroundColor Cyan
+        Write-Host "  --- Resposta (Layer $layerUsed) ------------------------------" -ForegroundColor Cyan
         Write-Host $result.Content -ForegroundColor White
-        Write-Host "  ──────────────────────────────────────────────────────────" -ForegroundColor Cyan
+        Write-Host "  ----------------------------------------------------------" -ForegroundColor Cyan
         Write-Host ""
         Write-Info "Resolucao: layer=$layerUsed  tempo=${elapsed}s  fonte=$($result.ResolvedBy)"
     }

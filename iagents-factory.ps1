@@ -1,5 +1,5 @@
 ﻿# ===============================================================
-# IAgentsFactory — Knowledge Hub Manager
+# IAgentsFactory  -  Knowledge Hub Manager
 #
 # Gerencia o Knowledge Hub local (SQLite + FTS5) para a
 # Fábrica de Software com Memória Persistente de IA.
@@ -1862,7 +1862,7 @@ function Invoke-UpdatePillars {
         Copy-Item -Path $srcPillars -Destination (Join-Path $dstSkills "engineering-pillars.md") -Force
         Write-Ok "skills/engineering-pillars.md atualizado"
     } else {
-        Write-Warn "skills/engineering-pillars.md nao encontrado na factory raiz — pulando copia de skill."
+        Write-Warn "skills/engineering-pillars.md nao encontrado na factory raiz  -  pulando copia de skill."
     }
 
     # 2. Copiar/atualizar prompts/code-generation.md
@@ -1902,24 +1902,24 @@ function Invoke-UpdatePillars {
 
 ## Engineering Pillars (obrigatorio em todos os projetos)
 
-### Pilar 1 — Security by Design
+### Pilar 1  -  Security by Design
 - Principio do Menor Privilegio: cada componente tem apenas as permissoes estritamente necessarias.
 - Nunca confiar na entrada do usuario: validar e sanitizar todo input externo.
 - Gestao de Segredos: jamais hardcodar senhas ou tokens; usar variaveis de ambiente ou vault.
 - Criptografia: TLS para dados em transito; Argon2 ou BCrypt para senhas.
 
-### Pilar 2 — Arquitetura e Design
+### Pilar 2  -  Arquitetura e Design
 - SOLID: seguir os cinco principios em codigo orientado a objetos.
 - Clean Architecture: desacoplar regras de negocio de detalhes tecnicos.
 - DRY: abstrair logica duplicada em funcoes/modulos reutilizaveis.
 - KISS: preferir a solucao mais simples antes de super-otimizar.
 
-### Pilar 3 — Qualidade do Codigo
+### Pilar 3  -  Qualidade do Codigo
 - Nomes semanticos: variaveis e funcoes devem descrever claramente sua intencao.
 - Testes automatizados (piramide): unitarios (70%), integracao (20%), E2E (10%).
 - Code reviews: todo PR deve ter pelo menos uma revisao antes do merge.
 
-### Pilar 4 — DevOps e Observabilidade
+### Pilar 4  -  DevOps e Observabilidade
 - CI/CD: automatizar builds, testes e deploys.
 - Logs e Monitoramento: o sistema deve alertar antes que o cliente perceba falha.
 - Infraestrutura como Codigo (IaC): servidores e containers definidos como codigo.
@@ -1927,16 +1927,16 @@ function Invoke-UpdatePillars {
             Add-Content -Path $constitutionPath -Value $pillarsSection -Encoding UTF8
             Write-Ok "specs/memory/constitution.md: Engineering Pillars adicionados"
         } else {
-            Write-Info "specs/memory/constitution.md: Engineering Pillars ja presentes — sem alteracao"
+            Write-Info "specs/memory/constitution.md: Engineering Pillars ja presentes  -  sem alteracao"
         }
     } else {
-        Write-Warn "specs/memory/constitution.md nao encontrado — pulando atualizacao de constitution."
+        Write-Warn "specs/memory/constitution.md nao encontrado  -  pulando atualizacao de constitution."
     }
 
     # 5. Exibir checklist
     Write-Host ""
     Write-Host "  ============================================================" -ForegroundColor DarkYellow
-    Write-Host "  ENGINEERING PILLARS — Checklist obrigatorio antes do deploy" -ForegroundColor DarkYellow
+    Write-Host "  ENGINEERING PILLARS  -  Checklist obrigatorio antes do deploy" -ForegroundColor DarkYellow
     Write-Host "  ============================================================" -ForegroundColor DarkYellow
     Write-Host "  Ref: skills/engineering-pillars.md" -ForegroundColor DarkGray
     Write-Host ""
@@ -1983,20 +1983,20 @@ function Invoke-Ask {
         Write-Err "hermes-bridge.ps1 nao encontrado. Execute: git pull"
         return
     }
-    $args = @("-Query", $QueryText)
-    if ($Domain)    { $args += @("-Domain",    $Domain) }
-    if ($Language)  { $args += @("-Language",  $Language) }
-    if ($Framework) { $args += @("-Framework", $Framework) }
+    $splat = @{ Query = $QueryText }
+    if ($Domain)    { $splat["Domain"]    = $Domain }
+    if ($Language)  { $splat["Language"]  = $Language }
+    if ($Framework) { $splat["Framework"] = $Framework }
     # Injetar projeto ativo se disponivel
     $cfgNow = Get-Config
-    if ($cfgNow.current_project) { $args += @("-Project", $cfgNow.current_project) }
-    & $bridgePath @args
+    if ($cfgNow.current_project) { $splat["Project"] = $cfgNow.current_project }
+    & $bridgePath @splat
 }
 
 # --- HERMES-STATUS COMMAND ------------------------------------
 
 function Invoke-HermesStatus {
-    Write-Title "Status — Layer 2 (Ollama Windows)"
+    Write-Title "Status  -  Layer 2 (Ollama Windows)"
 
     $ollamaUrl = "http://localhost:11434"
     $cfg = $null
@@ -2026,7 +2026,7 @@ function Invoke-HermesStatus {
     }
 
     if ($env:HERMES_DISABLED -eq "1") {
-        Write-Warn "HERMES_DISABLED=1 — Layer 2 esta desabilitado manualmente"
+        Write-Warn "HERMES_DISABLED=1  -  Layer 2 esta desabilitado manualmente"
     }
 }
 
@@ -2051,7 +2051,7 @@ function Invoke-EmbedIndex {
 function Invoke-HermesProvision {
     param([string]$TargetPath)
 
-    Write-Title "Hermes Provision — Subagentes por Projeto"
+    Write-Title "Hermes Provision  -  Subagentes por Projeto"
 
     $hermesProjectsDir = Join-Path $env:USERPROFILE ".iagents-factory\hermes-projects"
     if (-not (Test-Path $hermesProjectsDir)) {
@@ -2065,7 +2065,7 @@ function Invoke-HermesProvision {
     if ($TargetPath) {
         $rows = Invoke-Sql -Query "SELECT name, language, framework, path FROM factory_projects WHERE (path = '$($TargetPath.Replace("'","''"))' OR name = '$($TargetPath.Replace("'","''"))') AND is_active = 1 LIMIT 1;"
         if (-not $rows) {
-            # Nao esta registrado — provisionar com dados do path
+            # Nao esta registrado  -  provisionar com dados do path
             $name = Split-Path -Leaf $TargetPath
             $rows = @("$name|||") # name sem lang/fw/path
         }
