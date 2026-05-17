@@ -12,8 +12,9 @@
   },
   "local_model": {
     "provider": "ollama",
-    "model": "llama3.2:3b",
-    "fallback_model": "qwen2.5-coder:7b",
+    "mode": "windows-native",
+    "model": "gpt-oss:20b",
+    "fallback_model": "gpt-oss:20b",
     "ollama_url": "http://localhost:11434",
     "timeout_seconds": 120,
     "max_retries": 2

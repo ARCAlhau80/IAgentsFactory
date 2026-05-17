@@ -3,7 +3,7 @@
 #
 # Orquestra o fluxo de resolucao:
 #   Camada 1: Knowledge Hub local (SQLite, 0 tokens)
-#   Camada 2: Hermes + modelo Ollama local (0 custo externo)
+#   Camada 2: Ollama Windows nativo (HTTP localhost:11434, 0 custo externo)
 #   Camada 3: Provider externo (Claude/GPT, custo medido)
 #
 # Todo resultado das camadas 2 e 3 e capturado automaticamente
@@ -79,7 +79,7 @@ function Get-Config {
             min_quality_to_capture       = 0.7
         }
         hermes = [PSCustomObject]@{ enabled = $true }
-        local_model = [PSCustomObject]@{ provider = "ollama"; model = "llama3.2:3b" }
+        local_model = [PSCustomObject]@{ provider = "ollama"; model = "gpt-oss:20b"; ollama_url = "http://localhost:11434"; mode = "windows-native" }
     }
 }
 
@@ -157,73 +157,64 @@ LIMIT 3;
     }
 }
 
-# ── Camada 2: Hermes + Ollama local ─────────────────────────────
+# ── Camada 2: Ollama Windows nativo (HTTP) ───────────────────────
 
 function Invoke-HermesLocal {
     param([string]$QueryText, [string]$ProjectCtx, [int]$TimeoutSec)
 
-    # Verificar se Hermes esta disponivel e habilitado
     if ($env:HERMES_DISABLED -eq "1") {
-        Write-B "Hermes desabilitado (HERMES_DISABLED=1)"
+        Write-B "Ollama desabilitado (HERMES_DISABLED=1)"
         return $null
     }
 
-    $wslOk = $null -ne (Get-Command wsl -ErrorAction SilentlyContinue)
-    if (-not $wslOk) {
-        Write-B "WSL nao disponivel — pulando camada Hermes"
+    $cfg         = Get-Config
+    $ollamaUrl   = if ($cfg.local_model.ollama_url) { $cfg.local_model.ollama_url } else { "http://localhost:11434" }
+    $ollamaModel = if ($cfg.local_model.model)      { $cfg.local_model.model }      else { "gpt-oss:20b" }
+
+    # Verificar se Ollama esta rodando
+    try {
+        Invoke-RestMethod -Uri "$ollamaUrl/api/tags" -TimeoutSec 3 -ErrorAction Stop | Out-Null
+    } catch {
+        Write-B "Ollama nao disponivel em $ollamaUrl — pulando Layer 2"
+        Write-Log "WARN" "Ollama inacessivel: $_"
         return $null
     }
 
-    $hermesPresent = (wsl -d Ubuntu -- bash -c "command -v hermes 2>/dev/null" 2>$null).Trim()
-    if (-not $hermesPresent) {
-        Write-B "Hermes nao instalado no WSL — execute setup-hermes.ps1"
-        return $null
-    }
+    Write-B "Consultando Ollama Windows ($ollamaModel)..."
+    Write-Log "INFO" "Ollama query: $QueryText"
 
-    Write-B "Consultando Hermes (modelo local)..."
-    Write-Log "INFO" "Hermes query: $QueryText"
-
-    # Construir prompt com contexto da factory
     $ctxNote = if ($ProjectCtx) { " Contexto do projeto: $ProjectCtx." } else { "" }
-    $safeQuery = $QueryText.Replace('"', '\"').Replace('`', '\`')
-    $prompt = "Responda em portugues ou no idioma da pergunta.$ctxNote Pergunta: $safeQuery"
+    $prompt  = "Responda em portugues ou no idioma da pergunta.$ctxNote Pergunta: $QueryText"
 
-    # Chamada ao Hermes com timeout
-    $job = Start-Job -ScriptBlock {
-        param($distro, $p)
-        wsl -d $distro -- bash -c "hermes ask `"$p`" 2>/dev/null" 2>&1
-    } -ArgumentList @("Ubuntu", $prompt)
+    $body = @{
+        model  = $ollamaModel
+        prompt = $prompt
+        stream = $false
+    } | ConvertTo-Json -Compress
 
-    $completed = Wait-Job -Job $job -Timeout $TimeoutSec
-    if (-not $completed) {
-        Remove-Job $job -Force
-        Write-Warn "Hermes timeout (${TimeoutSec}s) — escalando para provider externo"
-        Write-Log "WARN" "Hermes timeout apos ${TimeoutSec}s"
+    try {
+        $resp = Invoke-RestMethod -Uri "$ollamaUrl/api/generate" `
+                    -Method POST -Body $body -ContentType "application/json" `
+                    -TimeoutSec $TimeoutSec -ErrorAction Stop
+
+        $content = [string]$resp.response
+        if ([string]::IsNullOrWhiteSpace($content) -or $content.Length -lt 20) {
+            Write-B "Ollama retornou resposta muito curta — escalando"
+            return $null
+        }
+
+        Write-Log "INFO" "Ollama respondeu: $($content.Substring(0,[Math]::Min(100,$content.Length)))..."
+
+        return [PSCustomObject]@{
+            Content     = $content.Trim()
+            SourceAgent = "ollama-windows"
+            Layer       = 2
+            ResolvedBy  = "ollama-windows"
+        }
+    } catch {
+        Write-Warn "Ollama erro: $_ — escalando para Layer 3"
+        Write-Log "WARN" "Ollama erro: $_"
         return $null
-    }
-
-    $output = Receive-Job $job
-    Remove-Job $job -Force
-
-    if ([string]::IsNullOrWhiteSpace($output)) {
-        Write-B "Hermes retornou resposta vazia"
-        Write-Log "WARN" "Hermes retornou vazio"
-        return $null
-    }
-
-    $outputStr = ($output -join "`n").Trim()
-    if ($outputStr.Length -lt 20) {
-        Write-B "Resposta do Hermes muito curta — escalando"
-        return $null
-    }
-
-    Write-Log "INFO" "Hermes respondeu: $($outputStr.Substring(0, [Math]::Min(100,$outputStr.Length)))..."
-
-    return [PSCustomObject]@{
-        Content     = $outputStr
-        SourceAgent = "hermes-local"
-        Layer       = 2
-        ResolvedBy  = "hermes-local"
     }
 }
 
@@ -342,24 +333,24 @@ if ($ForceLayer -eq 0 -or $ForceLayer -eq 1) {
     }
 }
 
-# ── LAYER 2: Hermes local ────────────────────────────────────────
+# ── LAYER 2: Ollama Windows nativo ──────────────────────────────
 if ($null -eq $result -and ($ForceLayer -eq 0 -or $ForceLayer -eq 2)) {
-    Write-B "Layer 2: consultando Hermes Agent (local)..."
+    Write-B "Layer 2: consultando Ollama Windows (local, sem custo externo)..."
     $hermesResult = Invoke-HermesLocal -QueryText $Query -ProjectCtx $Project -TimeoutSec $hermesTimeout
 
     if ($hermesResult) {
         $layerUsed = 2
         $result = $hermesResult
-        Write-Ok "Resolucao HERMES LOCAL (sem custo externo)"
-        Write-Log "INFO" "Layer 2 resolveu via Hermes"
+        Write-Ok "Resolucao OLLAMA LOCAL (sem custo externo)"
+        Write-Log "INFO" "Layer 2 resolveu via Ollama Windows"
 
         if ($autoCaptureHermes -and -not $DryRun) {
             Save-ToHub -QueryText $Query -ResponseContent $hermesResult.Content `
-                -SourceAgent "hermes-local" -DomainHint $Domain -ProjectName $Project `
+                -SourceAgent "ollama-windows" -DomainHint $Domain -ProjectName $Project `
                 -LangHint $Language -FwHint $Framework -Layer 2
         }
     } else {
-        Write-B "Hermes nao resolveu — escalando para Layer 3 (provider externo)"
+        Write-B "Ollama nao resolveu — escalando para Layer 3 (provider externo)"
     }
 }
 

@@ -1987,12 +1987,38 @@ function Invoke-Ask {
 # --- HERMES-STATUS COMMAND ------------------------------------
 
 function Invoke-HermesStatus {
-    $setupPath = Join-Path $PSScriptRoot "setup-hermes.ps1"
-    if (-not (Test-Path $setupPath)) {
-        Write-Err "setup-hermes.ps1 nao encontrado. Execute: git pull"
-        return
+    Write-Title "Status — Layer 2 (Ollama Windows)"
+
+    $ollamaUrl = "http://localhost:11434"
+    $cfg = $null
+    $cfgPath = Join-Path $env:USERPROFILE ".iagents-factory\hermes-config.json"
+    if (Test-Path $cfgPath) {
+        try { $cfg = Get-Content $cfgPath -Raw | ConvertFrom-Json } catch {}
     }
-    & $setupPath -CheckOnly
+    if ($cfg -and $cfg.local_model.ollama_url) { $ollamaUrl = $cfg.local_model.ollama_url }
+    $model = if ($cfg -and $cfg.local_model.model) { $cfg.local_model.model } else { "gpt-oss:20b" }
+
+    # Checar se Ollama esta rodando
+    try {
+        $tags = Invoke-RestMethod -Uri "$ollamaUrl/api/tags" -TimeoutSec 4 -ErrorAction Stop
+        Write-Ok "Ollama rodando em $ollamaUrl"
+        $modelNames = $tags.models | ForEach-Object { $_.name }
+        Write-Info "Modelos instalados: $($modelNames -join ', ')"
+        if ($modelNames -contains $model) {
+            Write-Ok "Modelo ativo: $model"
+        } else {
+            Write-Warn "Modelo '$model' nao encontrado. Disponivel: $($modelNames -join ', ')"
+            Write-Info "Para instalar: ollama pull $model"
+        }
+    } catch {
+        Write-Err "Ollama nao acessivel em $ollamaUrl"
+        Write-Info "Certifique-se de que o Ollama esta aberto na bandeja do sistema."
+        Write-Info "Kill switch: `$env:HERMES_DISABLED = '1'  (desliga Layer 2)"
+    }
+
+    if ($env:HERMES_DISABLED -eq "1") {
+        Write-Warn "HERMES_DISABLED=1 — Layer 2 esta desabilitado manualmente"
+    }
 }
 
 # --- HERMES-PROVISION COMMAND --------------------------------
