@@ -34,7 +34,7 @@
 
 param(
     [Parameter(Position=0)]
-    [ValidateSet("init","register","constitution","specify","plan","tasks","analyze","capture","search","search-cross","stats","projects","export","import","cleanup","dashboard","update-pillars","ask","hermes-status","hermes-update","hermes-provision","help")]
+    [ValidateSet("init","register","constitution","specify","plan","tasks","analyze","capture","search","search-cross","stats","projects","export","import","cleanup","dashboard","update-pillars","ask","hermes-status","hermes-update","hermes-provision","embed-index","help")]
     [string]$Command = "help",
 
     [Parameter(Position=1)]
@@ -1011,6 +1011,14 @@ CREATE TABLE IF NOT EXISTS hermes_escalations (
     UNIQUE(query, project)
 );
 
+CREATE TABLE IF NOT EXISTS solution_embeddings (
+    solution_id TEXT PRIMARY KEY,
+    model       TEXT NOT NULL,
+    embedding   TEXT NOT NULL,
+    dimensions  INTEGER,
+    created_at  TEXT DEFAULT (datetime('now','localtime'))
+);
+
 -- Indice para hermes_sessions
 CREATE INDEX IF NOT EXISTS idx_hermes_sessions_project ON hermes_sessions(project_id);
 CREATE INDEX IF NOT EXISTS idx_hermes_sessions_layer ON hermes_sessions(layer_used);
@@ -1786,6 +1794,7 @@ function Invoke-Help {
     Write-Host '    hermes-status            Verifica status do Hermes Agent local' -ForegroundColor White
     Write-Host '    hermes-update            Atualiza Hermes para a ultima versao' -ForegroundColor White
     Write-Host '    hermes-provision [path]  Provisiona subagente Hermes em projetos existentes' -ForegroundColor White
+    Write-Host '    embed-index              Gera embeddings vetoriais para busca semantica (Layer 1b)' -ForegroundColor White
     Write-Host '    help                     Este menu' -ForegroundColor White
     Write-Host ''
     Write-Host '  FLAGS:' -ForegroundColor Yellow
@@ -2021,6 +2030,22 @@ function Invoke-HermesStatus {
     }
 }
 
+# --- EMBED-INDEX COMMAND -------------------------------------
+
+function Invoke-EmbedIndex {
+    param([switch]$All)
+    $embedScript = Join-Path $PSScriptRoot "embed-hub.ps1"
+    if (-not (Test-Path $embedScript)) {
+        Write-Err "embed-hub.ps1 nao encontrado. Execute: git pull"
+        return
+    }
+    if ($All) {
+        & $embedScript -All
+    } else {
+        & $embedScript
+    }
+}
+
 # --- HERMES-PROVISION COMMAND --------------------------------
 
 function Invoke-HermesProvision {
@@ -2140,6 +2165,7 @@ switch ($Command) {
     "hermes-status"  { Invoke-HermesStatus }
     "hermes-update"    { Invoke-HermesUpdate }
     "hermes-provision" { Invoke-HermesProvision -TargetPath $Arg1 }
+    "embed-index"      { Invoke-EmbedIndex }
     "help"             { Invoke-Help }
     default         { Invoke-Help }
 }

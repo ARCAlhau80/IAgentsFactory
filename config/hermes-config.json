@@ -15,6 +15,7 @@
     "mode": "windows-native",
     "model": "gpt-oss:20b",
     "fallback_model": "gpt-oss:20b",
+    "embed_model": "nomic-embed-text",
     "ollama_url": "http://localhost:11434",
     "timeout_seconds": 120,
     "max_retries": 2
@@ -37,6 +38,7 @@
   ],
   "resolution_flow": {
     "local_hub_threshold": 0.75,
+    "vector_hub_threshold": 0.72,
     "hermes_local_timeout_seconds": 90,
     "auto_capture_hermes_responses": true,
     "auto_capture_external_responses": true,

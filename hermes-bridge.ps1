@@ -79,7 +79,7 @@ function Get-Config {
             min_quality_to_capture       = 0.7
         }
         hermes = [PSCustomObject]@{ enabled = $true }
-        local_model = [PSCustomObject]@{ provider = "ollama"; model = "gpt-oss:20b"; ollama_url = "http://localhost:11434"; mode = "windows-native" }
+        local_model = [PSCustomObject]@{ provider = "ollama"; model = "gpt-oss:20b"; embed_model = "nomic-embed-text"; ollama_url = "http://localhost:11434"; mode = "windows-native" }
     }
 }
 
@@ -94,6 +94,106 @@ function Invoke-SqlQuery {
     $sqlite = Get-SqliteCmd
     if (-not $sqlite) { return $null }
     return & $sqlite $DB_PATH $Query 2>$null
+}
+
+# ── Embedding helpers ─────────────────────────────────────
+
+function Get-EmbeddingFromOllama {
+    param([string]$Text, [string]$Url, [string]$EmbedModel)
+    $body = @{ model = $EmbedModel; prompt = $Text } | ConvertTo-Json -Compress
+    try {
+        $resp = Invoke-RestMethod -Uri "$Url/api/embeddings" `
+                    -Method POST -Body $body -ContentType "application/json" `
+                    -TimeoutSec 20 -ErrorAction Stop
+        return [double[]]$resp.embedding
+    } catch {
+        Write-Log "WARN" "Embedding falhou: $_"
+        return $null
+    }
+}
+
+function Get-CosineSimilarity {
+    param([double[]]$A, [double[]]$B)
+    $n = [Math]::Min($A.Length, $B.Length)
+    $dot = 0.0; $magA = 0.0; $magB = 0.0
+    for ($i = 0; $i -lt $n; $i++) {
+        $dot  += $A[$i] * $B[$i]
+        $magA += $A[$i] * $A[$i]
+        $magB += $B[$i] * $B[$i]
+    }
+    if ($magA -le 0 -or $magB -le 0) { return 0.0 }
+    return $dot / ([Math]::Sqrt($magA) * [Math]::Sqrt($magB))
+}
+
+function Search-VectorHub {
+    param([string]$QueryText, [string]$EmbedModel, [string]$OllamaUrl, [double]$Threshold)
+
+    $sqlite = Get-SqliteCmd
+    if (-not $sqlite -or -not (Test-Path $DB_PATH)) { return $null }
+
+    # Verificar se tabela existe e tem dados
+    $count = & $sqlite $DB_PATH "SELECT COUNT(*) FROM solution_embeddings;" 2>$null
+    if (-not $count -or [int]$count -eq 0) { return $null }
+
+    # Gerar embedding da query
+    $queryEmb = Get-EmbeddingFromOllama -Text $QueryText -Url $OllamaUrl -EmbedModel $EmbedModel
+    if (-not $queryEmb) { return $null }
+
+    # Carregar embeddings do Hub (max 500, melhores scores)
+    $sql = @"
+SELECT se.solution_id, se.embedding,
+       ls.domain, ls.pattern, ls.language, ls.framework,
+       ls.solution_summary, ls.solution_content, ls.quality_score,
+       ls.source_agent, ls.source_project
+FROM solution_embeddings se
+JOIN learned_solutions ls ON ls.id = se.solution_id
+WHERE ls.is_deprecated = 0
+ORDER BY ls.quality_score DESC
+LIMIT 500;
+"@
+
+    $rows = & $sqlite -separator "|VSEP|" $DB_PATH $sql 2>$null
+    if (-not $rows) { return $null }
+
+    $bestScore  = 0.0
+    $bestResult = $null
+
+    foreach ($row in @($rows)) {
+        $cols = [string]$row -split '\|VSEP\|', 11
+        if ($cols.Count -lt 9) { continue }
+
+        $embJson = $cols[1].Trim()
+        if (-not $embJson -or $embJson.Length -lt 5) { continue }
+
+        try {
+            $storedEmb = [double[]]($embJson | ConvertFrom-Json)
+        } catch { continue }
+
+        $sim = Get-CosineSimilarity -A $queryEmb -B $storedEmb
+        if ($sim -gt $bestScore) {
+            $bestScore = $sim
+            $bestResult = [PSCustomObject]@{
+                Id            = $cols[0]
+                Domain        = $cols[2]
+                Pattern       = $cols[3]
+                Language      = $cols[4]
+                Framework     = $cols[5]
+                Summary       = $cols[6]
+                Content       = $cols[7]
+                QualityScore  = [double]($cols[8])
+                SourceAgent   = $cols[9]
+                SourceProject = $cols[10]
+                Similarity    = $sim
+                Layer         = 1
+                ResolvedBy    = "vector-hub"
+            }
+        }
+    }
+
+    if ($bestResult -and $bestScore -ge $Threshold) {
+        return $bestResult
+    }
+    return $null
 }
 
 # ── Camada 1: Knowledge Hub local ───────────────────────────────
@@ -283,6 +383,23 @@ VALUES
     if ($LASTEXITCODE -eq 0) {
         Write-Ok "Resposta capturada no Knowledge Hub (layer=$Layer, agent=$SourceAgent)"
         Write-Log "INFO" "Capturado: id=$id domain=$dom agent=$SourceAgent layer=$Layer"
+
+        # Auto-gerar embedding da solucao capturada (se Ollama disponivel)
+        $cfg2 = Get-Config
+        $eUrl   = if ($cfg2.local_model.ollama_url)  { $cfg2.local_model.ollama_url }  else { "http://localhost:11434" }
+        $eModel = if ($cfg2.local_model.embed_model) { $cfg2.local_model.embed_model } else { "nomic-embed-text" }
+        try {
+            $textForEmbed = "$QueryText $($ResponseContent.Substring(0,[Math]::Min(500,$ResponseContent.Length)))"
+            $emb = Get-EmbeddingFromOllama -Text $textForEmbed -Url $eUrl -EmbedModel $eModel
+            if ($emb) {
+                $embJson  = ($emb | ConvertTo-Json -Compress).Replace("'","''")
+                $safeEMod = $eModel.Replace("'","''")
+                & $sqlite $DB_PATH "INSERT OR REPLACE INTO solution_embeddings (solution_id, model, embedding, dimensions) VALUES ('$id','$safeEMod','$embJson',$($emb.Count));" 2>$null | Out-Null
+                Write-Log "INFO" "Embedding auto-gerado: id=$id dims=$($emb.Count)"
+            }
+        } catch {
+            Write-Log "WARN" "Auto-embed falhou (nao critico): $_"
+        }
     } else {
         if ($result -match "UNIQUE constraint") {
             Write-Info "Resposta ja existe no Knowledge Hub (hash duplicado)"
@@ -295,10 +412,13 @@ VALUES
 # ── MAIN ─────────────────────────────────────────────────────────
 
 $cfg = Get-Config
-$threshold   = [double]$cfg.resolution_flow.local_hub_threshold
-$hermesTimeout = [int]$cfg.resolution_flow.hermes_local_timeout_seconds
+$threshold      = [double]$cfg.resolution_flow.local_hub_threshold
+$vecThreshold   = [double](if ($cfg.resolution_flow.vector_hub_threshold) { $cfg.resolution_flow.vector_hub_threshold } else { 0.72 })
+$hermesTimeout  = [int]$cfg.resolution_flow.hermes_local_timeout_seconds
 $autoCaptureHermes   = [bool]$cfg.resolution_flow.auto_capture_hermes_responses
 $autoCaptureExternal = [bool]$cfg.resolution_flow.auto_capture_external_responses
+$ollamaUrl   = if ($cfg.local_model.ollama_url) { $cfg.local_model.ollama_url } else { "http://localhost:11434" }
+$embedModel  = if ($cfg.local_model.embed_model) { $cfg.local_model.embed_model } else { "nomic-embed-text" }
 
 Write-Log "INFO" "Bridge iniciado: query='$Query' domain='$Domain' project='$Project' forceLayer=$ForceLayer"
 
@@ -314,22 +434,38 @@ $result = $null
 $layerUsed = 0
 $startTime = Get-Date
 
-# ── LAYER 1: Knowledge Hub ───────────────────────────────────────
+# ── LAYER 1a: Knowledge Hub FTS5 ────────────────────────────────
 if ($ForceLayer -eq 0 -or $ForceLayer -eq 1) {
-    Write-B "Layer 1: buscando no Knowledge Hub local..."
+    Write-B "Layer 1a: buscando no Knowledge Hub (FTS5 keywords)..."
     $hubResult = Search-LocalHub -QueryText $Query -DomainFilter $Domain -LangFilter $Language
 
     if ($hubResult -and $hubResult.QualityScore -ge $threshold) {
         $layerUsed = 1
         $result = $hubResult
-        Write-Ok "Resolucao LOCAL (score=$([Math]::Round($hubResult.QualityScore,2)), agent=$($hubResult.SourceAgent))"
-        Write-Log "INFO" "Layer 1 resolveu: id=$($hubResult.Id) score=$($hubResult.QualityScore)"
+        Write-Ok "Resolucao FTS5 LOCAL (score=$([Math]::Round($hubResult.QualityScore,2)), agent=$($hubResult.SourceAgent))"
+        Write-Log "INFO" "Layer 1a resolveu: id=$($hubResult.Id) score=$($hubResult.QualityScore)"
     } else {
         if ($hubResult) {
-            Write-B "Match local abaixo do threshold ($([Math]::Round($hubResult.QualityScore,2)) < $threshold) — escalando"
+            Write-B "FTS5 abaixo do threshold ($([Math]::Round($hubResult.QualityScore,2)) < $threshold) — tentando busca vetorial"
         } else {
-            Write-B "Sem match local — escalando para Layer 2"
+            Write-B "Sem match FTS5 — tentando busca vetorial (semantica)"
         }
+    }
+}
+
+# ── LAYER 1b: Knowledge Hub Vector Search ──────────────────────
+if ($null -eq $result -and ($ForceLayer -eq 0 -or $ForceLayer -eq 1)) {
+    Write-B "Layer 1b: busca vetorial (cosine similarity, threshold=$vecThreshold)..."
+    $vecResult = Search-VectorHub -QueryText $Query -EmbedModel $embedModel `
+                     -OllamaUrl $ollamaUrl -Threshold $vecThreshold
+
+    if ($vecResult) {
+        $layerUsed = 1
+        $result = $vecResult
+        Write-Ok "Resolucao VETORIAL LOCAL (sim=$([Math]::Round($vecResult.Similarity,3)), agent=$($vecResult.SourceAgent))"
+        Write-Log "INFO" "Layer 1b resolveu via vector search: id=$($vecResult.Id) sim=$($vecResult.Similarity)"
+    } else {
+        Write-B "Sem match vetorial — escalando para Layer 2 (Ollama)"
     }
 }
 
