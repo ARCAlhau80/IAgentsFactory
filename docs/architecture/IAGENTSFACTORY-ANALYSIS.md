@@ -1,23 +1,54 @@
-﻿# 🏭 Análise Técnica: IAgentsFactory → Fábrica de Software com Memória Persistente
+﻿# 🏭 Análise Técnica: IAgentsFactory — Fábrica de Software com Memória Persistente e IA Local
 
-**Data:** 2026-04-06  
+**Criado em:** 2026-04-06  
+**Atualizado em:** 2026-05-17 (Hermes Edition)  
 **Autor:** AR CALHAU (assistido por COORDINATOR Agent)  
-**Status:** ✅ Aprovado — Início de implementação  
-**Versão:** 1.0
+**Status:** ✅ Operacional  
+**Versão:** 3.0.0
 
 ---
 
 ## 1. Sumário Executivo
 
-Transformar o **IAgentsFactory** a partir da base conceitual do ISGT (IA Squad Generic Template) em uma **Fábrica de Software Multi-Projeto** com **Memória de Longa Duração**, capaz de reter, indexar e reutilizar conhecimento adquirido em interações com agentes de IA externos (Claude, GPT-4o, DeepSeek, Gemini, Ollama, etc.).
+O **IAgentsFactory** é uma **Fábrica de Software Multi-Projeto** com **Memória de Longa Duração** e **IA Local Integrada**, capaz de:
 
-**Objetivo primário:** Otimizar o uso de agentes externos — não substituí-los, mas garantir que soluções já aprendidas sejam reutilizadas localmente, economizando tokens, tempo e custo.
+1. Reter, indexar e reutilizar conhecimento adquirido em interações com agentes externos (Claude, GPT-4o, DeepSeek, etc.)
+2. Resolver consultas localmente via **Hermes Agent + Ollama** antes de consumir tokens externos
+3. Orquestrar o desenvolvimento com fluxo `constitution → specify → plan → tasks → analyze`
+4. Garantir qualidade via Engineering Pillars (Security, Architecture, Quality, DevOps)
 
-**Atualização 2026-04-09:** a arquitetura agora inclui um workflow `SPEC` leve nativo da Factory para materializar `constitution/spec/plan/tasks`, validar antes da implementação e publicar esses artefatos também como memória reutilizável.
+**Objetivo primário:** Minimizar o custo com provedores externos via uma arquitetura de resolução em **3 camadas** onde o mais caro só é acionado quando o mais barato não resolve.
 
 ---
 
-## 2. Análise do Estado Atual (AS-IS)
+## 2. Análise do Estado Atual (AS-IS → v3.0)
+
+### 2.1 Evolução do Produto
+
+| Versão | Data | Novidades Principais |
+|--------|------|---------------------|
+| 1.0 | Abr 2026 | Knowledge Hub (SQLite+FTS5), CLI, captura automática |
+| 2.0 | Mai 2026 | Engineering Pillars, SPEC workflow, fluxo constitution→analyze |
+| **3.0** | **Mai 2026** | **Hermes Agent + Ollama local, resolução 3 camadas, auto-update** |
+
+### 2.2 Estado Atual dos Componentes
+
+| Componente | Estado | Descrição |
+|------------|--------|-----------|
+| Knowledge Hub | ✅ Operacional | SQLite+FTS5, search, capture, stats |
+| SPEC Workflow | ✅ Operacional | constitution/specify/plan/tasks/analyze |
+| Engineering Pillars | ✅ Operacional | checklists + gate em new-project.ps1 |
+| Dashboard | ✅ Operacional | Node.js local, knowledge.db |
+| Hermes Bridge | ✅ Implementado | 3-layer resolution, hermes-bridge.ps1 |
+| Hermes Setup | ✅ Implementado | auto-install WSL2+Ollama, setup-hermes.ps1 |
+| Auto-update | ✅ Implementado | Task Scheduler, hermes-update.ps1 |
+| Memory Sync | ✅ Implementado | bidirecional, hermes-sync.ps1 |
+
+---
+
+## 3. Arquitetura v3.0 — 3-Layer Resolution
+
+### 3.1 Visão Geral
 
 ### 2.1 A Base Conceitual Herdada do ISGT
 
@@ -96,81 +127,64 @@ Transformar o **IAgentsFactory** a partir da base conceitual do ISGT (IA Squad G
 
 ## 4. Arquitetura Proposta (TO-BE)
 
-### 4.1 Visão Geral
+### 3.1 Visão Geral
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    IAgentsFactory (Multi-Projeto)                     │
+│                    IAgentsFactory v3.0 (Multi-Projeto)              │
 │                                                                     │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐          │
 │  │ Proj ROI │  │Proj Médico│  │ Proj CRM │  │ Proj N.. │          │
 │  │ Loteria  │  │  Saúde   │  │ Vendas   │  │          │          │
 │  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘          │
-│       │              │              │              │                │
 │       └──────────────┴──────────────┴──────────────┘                │
-│                          │                                          │
+│                          │ ask / search / specify                   │
 │              ┌───────────▼────────────┐                             │
-│              │   Knowledge Hub Local  │                             │
-│              │  (SQLite + FTS5 + RAG) │                             │
-│              │                        │                             │
-│              │ • Soluções indexadas    │                             │
-│              │ • Patterns aprendidos  │                             │
-│              │ • Erros resolvidos     │                             │
-│              │ • Decisões (ADRs)      │                             │
-│              │ • Embeddings TF-IDF    │                             │
+│              │  hermes-bridge.ps1     │  ← 3-layer orchestrator    │
 │              └───────────┬────────────┘                             │
-│                          │                                          │
-│         ┌────────────────┼────────────────┐                        │
-│         ▼                ▼                ▼                         │
-│  ┌────────────┐  ┌────────────┐  ┌─────────────┐                  │
-│  │ OpenClaude │  │ MCP Graph  │  │ VS Code     │                  │
-│  │  (CLI +    │  │ Workflow   │  │ Copilot     │                  │
-│  │  Multi-    │  │ (Grafos +  │  │ (Agents +   │                  │
-│  │  Provider) │  │  RAG +     │  │  Skills)    │                  │
-│  │            │  │  Planning) │  │             │                  │
-│  └────────────┘  └────────────┘  └─────────────┘                  │
+│       ┌───────────────────┼──────────────────────┐                  │
+│       ▼                   ▼                      ▼                  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────────────┐      │
+│  │  CAMADA 1    │  │  CAMADA 2    │  │  CAMADA 3            │      │
+│  │  Knowledge   │  │  Hermes +    │  │  Provider Externo    │      │
+│  │  Hub (FTS5)  │  │  Ollama      │  │  Claude / GPT / etc  │      │
+│  │  0 tokens    │  │  (WSL2)      │  │  custo medido        │      │
+│  │  < 0.1s      │  │  0 custo     │  │  auto-capturado      │      │
+│  │  threshold   │  │  90s timeout │  │  no Hub              │      │
+│  │  ≥ 0.75      │  │  auto-cap.   │  │                      │      │
+│  └──────────────┘  └──────────────┘  └──────────────────────┘      │
 │                                                                     │
 │  ┌─────────────────────────────────────────────────────────────┐   │
-│  │              Agentes Externos (Token-Otimizados)            │   │
-│  │  Claude Sonnet │ GPT-4o │ DeepSeek │ Gemini │ Ollama Local │   │
+│  │              Task Scheduler (automação sem intervenção)      │   │
+│  │  HermesUpdate 06:00 diário │ HermesSync 06:30 diário        │   │
 │  └─────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 4.2 Fluxo de Conhecimento (Knowledge Pipeline)
+### 3.2 Fluxo de Resolução (Knowledge Pipeline v3)
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    FLUXO DE APRENDIZADO                     │
+│              FLUXO: ask "como implementar X"                │
 │                                                             │
-│  1. Dev trabalha no Projeto via ISGT (VS Code Copilot)      │
+│  1. hermes-bridge recebe a query                            │
 │     │                                                       │
-│  2. Precisa resolver problema (ex: cálculo ROI)             │
-│     │                                                       │
-│  3. ┌──► ISGT consulta Knowledge Hub (MCP Graph)            │
-│     │    │                                                   │
-│     │    ├── MATCH ≥ 75%? → Retorna solução local ──────►   │
-│     │    │   (0 tokens externos, ~ms de latência)     FIM   │
-│     │    │                                                   │
-│     │    └── MATCH < 75%? → Roteia para agente externo      │
-│     │         │                                              │
-│  4. │    OpenClaude seleciona melhor provider                │
-│     │    (DeepSeek p/ simples, GPT-4o p/ complexo)          │
-│     │         │                                              │
-│  5. │    Agente externo responde                             │
-│     │         │                                              │
-│  6. │    Knowledge Capture Pipeline                          │
-│     │    ├── Classifica (domain, pattern, language)          │
-│     │    ├── Indexa (FTS5 + TF-IDF embeddings)              │
-│     │    ├── Deduplica (SHA-256)                             │
-│     │    └── Salva no Knowledge Hub                          │
-│     │         │                                              │
-│  7. └──── Próxima vez → busca local primeiro                │
+│  2. Busca FTS5 no Knowledge Hub (camada 1)                  │
+│     ├── score ≥ 0.75 → retorna resposta local ──────► FIM   │
+│     │   (0 tokens, < 100ms)                                 │
+│     └── score < 0.75 ↓                                     │
 │                                                             │
+│  3. Consulta Hermes + Ollama via WSL2 (camada 2)            │
+│     ├── resposta OK → auto-captura no Hub ──────────► FIM   │
+│     │   (0 custo externo, resposta salva p/ futuro)         │
+│     └── timeout / indisponível ↓                            │
+│                                                             │
+│  4. Escala para provider externo (camada 3)                 │
+│     ├── resposta auto-capturada no Hub                      │
+│     ├── registra em hermes_escalations (métricas)           │
+│     └── próxima consulta igual → camada 1 ──────────► FIM  │
 └─────────────────────────────────────────────────────────────┘
 ```
-
-### 4.3 Camadas Arquiteturais
 
 ```
 ┌──────────────────────────────────────────────────────────┐
@@ -187,24 +201,30 @@ Transformar o **IAgentsFactory** a partir da base conceitual do ISGT (IA Squad G
 │  └─ Responsabilidade: coordenar fluxo multi-projeto      │
 ├──────────────────────────────────────────────────────────┤
 │  INTELLIGENCE LAYER                                      │
-│  ├─ RAG Engine (TF-IDF embeddings + BM25 ranking)        │
+│  ├─ Layer 1: FTS5 Search (threshold ≥ 0.75)              │
+│  ├─ Layer 2: Hermes + Ollama (WSL2, 0 custo externo)     │
+│  ├─ Layer 3: Provider externo (fallback medido)          │
 │  ├─ Cross-Project Search (busca entre projetos)          │
-│  ├─ Token Budget Manager (otimiza contexto)              │
-│  ├─ Similarity Matcher (threshold ≥ 75%)                 │
-│  └─ Responsabilidade: buscar e ranquear conhecimento     │
+│  └─ Responsabilidade: buscar pelo caminho mais barato    │
 ├──────────────────────────────────────────────────────────┤
 │  PERSISTENCE LAYER                                       │
 │  ├─ SQLite + WAL mode (ACID, concurrent reads)           │
 │  ├─ FTS5 (full-text search)                              │
 │  ├─ Knowledge Store (SHA-256 dedup, 5 sources)           │
-│  ├─ Embeddings Table (TF-IDF vectors)                    │
+│  ├─ hermes_sessions + hermes_escalations (métricas)      │
 │  └─ Responsabilidade: armazenamento local-first          │
 ├──────────────────────────────────────────────────────────┤
+│  AUTOMATION LAYER                                        │
+│  ├─ Task Scheduler: HermesUpdate (06:00 diário)          │
+│  ├─ Task Scheduler: HermesSync   (06:30 diário)          │
+│  └─ Responsabilidade: manutenção zero-touch              │
+├──────────────────────────────────────────────────────────┤
 │  PROVIDER LAYER                                          │
+│  ├─ Hermes + Ollama (local, WSL2, custo zero)            │
 │  ├─ OpenClaude (200+ models, agent routing)              │
 │  ├─ MCP Protocol (26 tools, stdio + HTTP transport)      │
 │  ├─ GitHub Copilot (VS Code native)                      │
-│  └─ Responsabilidade: comunicação com agentes externos   │
+│  └─ Responsabilidade: comunicação com agentes            │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -277,7 +297,7 @@ CREATE TABLE factory_projects (
 CREATE TABLE learning_sessions (
   id TEXT PRIMARY KEY,
   project_id TEXT REFERENCES factory_projects(id),
-  agent TEXT NOT NULL,             -- 'claude-sonnet', 'gpt-4o'
+  agent TEXT NOT NULL,             -- 'claude-sonnet', 'gpt-4o', 'hermes-local'
   started_at TEXT DEFAULT (datetime('now')),
   ended_at TEXT,
   total_tokens_used INTEGER DEFAULT 0,
@@ -285,13 +305,26 @@ CREATE TABLE learning_sessions (
   summary TEXT
 );
 
--- Embeddings TF-IDF para busca semântica
-CREATE TABLE solution_embeddings (
-  solution_id TEXT REFERENCES learned_solutions(id),
-  chunk_index INTEGER,
-  embedding TEXT,                  -- JSON array de floats
-  chunk_text TEXT,
-  PRIMARY KEY (solution_id, chunk_index)
+-- NOVO v3.0: sessões do Hermes Agent (métricas de resolução local)
+CREATE TABLE hermes_sessions (
+  id TEXT PRIMARY KEY,
+  project_id TEXT REFERENCES factory_projects(id),
+  query TEXT NOT NULL,
+  resolved_by TEXT DEFAULT 'unknown',  -- 'local-hub', 'hermes-local', 'external'
+  layer_used INTEGER DEFAULT 3,        -- 1, 2 ou 3
+  response_content TEXT DEFAULT '',
+  elapsed_sec REAL DEFAULT 0,
+  tokens_saved INTEGER DEFAULT 0,      -- estimativa de tokens economizados
+  created_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+-- NOVO v3.0: escalações para provider externo (métricas de economia)
+CREATE TABLE hermes_escalations (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  query TEXT NOT NULL,
+  project TEXT DEFAULT '',
+  escalated_at TEXT DEFAULT (datetime('now','localtime')),
+  UNIQUE(query, project)               -- sem duplicatas por query+projeto
 );
 ```
 
@@ -303,16 +336,16 @@ CREATE TABLE solution_embeddings (
 
 | # | Pró | Impacto | Confiança |
 |---|-----|---------|-----------|
-| 1 | **Economia massiva de tokens** — reutiliza soluções validadas | 💰 -60% a -90% custo APIs | 🟢 Alta |
-| 2 | **Velocidade** — busca local em ms vs. 2-5s API | ⚡ Feedback instantâneo | 🟢 Alta |
-| 3 | **Consistência** — mesma solução reutilizada = menos bugs | 🎯 Padrões convergem | 🟢 Alta |
-| 4 | **Offline-first** — funciona sem internet para soluções aprendidas | 🔌 Independência | 🟢 Alta |
-| 5 | **IP local** — conhecimento fica na máquina, não na cloud | 🔒 Controle total | 🟢 Alta |
-| 6 | **ROI crescente** — fábrica fica mais inteligente a cada projeto | 📈 Exponencial | 🟡 Média |
-| 7 | **Multi-projeto** — compartilha aprendizados entre projetos | 🏭 True factory | 🟢 Alta |
-| 8 | **Stack pronta** — MCP Graph tem 80% do que precisamos | 🔧 Menos dev | 🟢 Alta |
-| 9 | **Multi-provider** — OpenClaude otimiza custo por routing | 💡 Cost-aware | 🟡 Média |
-| 10 | **Sustentável** — custo cresce log, não linear | 📊 Escala | 🟢 Alta |
+| 1 | **Economia massiva de tokens** — camada 1+2 resolvem sem custo externo | 💰 -70% a -95% custo APIs | 🟢 Alta |
+| 2 | **Velocidade** — busca local em ms vs. 2-5s API externa | ⚡ Feedback instantâneo | 🟢 Alta |
+| 3 | **IA local gratuita** — Hermes+Ollama resolve sem enviar dados para fora | 🔒 Privacidade + custo zero | 🟢 Alta |
+| 4 | **Consistência** — mesma solução reutilizada = menos bugs | 🎯 Padrões convergem | 🟢 Alta |
+| 5 | **Offline-first** — funciona sem internet para soluções aprendidas e Hermes | 🔌 Independência | 🟢 Alta |
+| 6 | **Auto-update sem intervenção** — Task Scheduler mantém tudo atualizado | 🤖 Zero-touch | 🟢 Alta |
+| 7 | **IP local** — conhecimento e modelos ficam na máquina, não na cloud | 🔒 Controle total | 🟢 Alta |
+| 8 | **ROI crescente** — fábrica fica mais inteligente a cada projeto | 📈 Exponencial | 🟡 Média |
+| 9 | **Multi-projeto** — compartilha aprendizados entre projetos | 🏭 True factory | 🟢 Alta |
+| 10 | **Multi-provider** — fallback inteligente por camada | 💡 Cost-aware | 🟢 Alta |
 
 ### 6.2 Contras e Riscos
 

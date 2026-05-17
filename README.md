@@ -4,25 +4,39 @@
 **Origem:** Evolução do ISGT, que permanece como ADK base e referência de templates.  
 **Posicionamento:** `IAgentsFactory` é um produto separado, com identidade própria, voltado para orquestração, captura de conhecimento e execução multi-projeto.
 
-**Novidade:** fluxo nativo de especificacao leve com `constitution -> specify -> plan -> tasks -> analyze`, ligado ao Knowledge Hub e com gate antes de implementacao/captura.
+**Versão:** 3.0.0 — Hermes Edition  
+**Maio 2026 — Novidade:** integração do **Hermes Agent local** (Nous Research) criando resolução em 3 camadas: Knowledge Hub → Hermes+Ollama → Provider externo. Zero custo externo para consultas recorrentes.
 
 ---
 
 ## 🧠 Como Funciona
 
+### Resolução em 3 Camadas
+
 ```
-┌─────────────────────────────────────────────────────────┐
-│  Dev pede solução → Agente IA gera → Factory CAPTURA    │
-│  Dev pede similar → Factory BUSCA  → Reutiliza (0 tok)  │
-│  Economia cresce exponencialmente com o tempo            │
-└─────────────────────────────────────────────────────────┘
+╔════════════════════════════════════════════════════════════╗
+║  ask "como implementar jwt em fastapi"                     ║
+╠════════════════════════════════════════════════════════════╣
+║  CAMADA 1 → Knowledge Hub local (SQLite FTS5)              ║
+║             0 tokens │ < 0.1s │ threshold ≥ 0.75           ║
+║             ↓ sem match suficiente?                        ║
+║  CAMADA 2 → Hermes Agent + Ollama (local, WSL2)            ║
+║             0 custo externo │ timeout 90s │ auto-captura   ║
+║             ↓ timeout ou falha?                            ║
+║  CAMADA 3 → Provider externo (Claude / GPT)                ║
+║             custo medido │ resposta capturada no Hub        ║
+╚════════════════════════════════════════════════════════════╝
 ```
 
+> Toda resposta das camadas 2 e 3 é **capturada automaticamente** no Knowledge Hub
+> com deduplicação SHA-256 — tornando a próxima consulta igual **gratuita e instantânea**.
+
 **Ciclo de Vida:**
-1. **Buscar** → `iagents-factory.ps1 search "cálculo roi"` → encontra solução anterior
-2. **Gerar** → Se não encontrar, agente gera normalmente
-3. **Capturar** → `iagents-factory.ps1 capture` → salva no Knowledge Hub
-4. **Reutilizar** → Próximo projeto consulta automaticamente
+1. **Perguntar** → `iagents-factory.ps1 ask "sua dúvida"` → resolve pelo caminho mais barato
+2. **Buscar** → `iagents-factory.ps1 search "cálculo roi"` → encontra solução anterior
+3. **Gerar** → Se não encontrar, agente gera normalmente
+4. **Capturar** → `iagents-factory.ps1 capture` → salva no Knowledge Hub
+5. **Reutilizar** → Próximo projeto consulta automaticamente
 
 ---
 
@@ -116,6 +130,24 @@ O wizard coleta contexto de negocio, consulta a base local quando possivel, suge
 .\iagents-factory.ps1 stats
 ```
 
+### 5.1. Consulta com IA local (Hermes)
+```powershell
+# Instalar Hermes (necessário apenas uma vez, ~5-15 min)
+.\setup-hermes.ps1 -Auto
+
+# Consulta com resolução 3 camadas
+.\iagents-factory.ps1 ask "como implementar paginação em NestJS"
+
+# Consulta com contexto de domínio
+.\iagents-factory.ps1 ask "padrão repository em Java" -Domain backend -Language java
+
+# Verificar status do agente local
+.\iagents-factory.ps1 hermes-status
+
+# Atualizar Hermes para última versão
+.\iagents-factory.ps1 hermes-update
+```
+
 ### 6. Dashboards
 ```powershell
 # Dashboard nativo da Factory (knowledge.db)
@@ -139,6 +171,7 @@ IAgentsFactory/
 │   ├── context/                     ← AS-IS, TO-BE, type_matrix
 │   └── agents/                      ← 8 agentes IA (incl. KNOWLEDGE)
 ├── config/                          ← Configs da Factory
+│   ├── hermes-config.json           ← Configuração do Hermes Agent (template)
 │   ├── openclaude-settings.json     ← Template OpenClaude com routing
 │   ├── dashboard-config.json        ← Métricas e KPIs do Knowledge Hub
 │   ├── git-sync-guide.md            ← Guia team sync via Git
@@ -151,7 +184,10 @@ IAgentsFactory/
 │   │   └── IAGENTSFACTORY-PRESENTATION.md
 │   ├── decisions/
 │   │   ├── README.md
-│   │   └── ADR-001-knowledge-hub-architecture.md
+│   │   ├── ADR-001-knowledge-hub-architecture.md
+│   │   ├── ADR-002-iagentsfactory-repo-split.md
+│   │   ├── ADR-003-spec-workflow-governance.md
+│   │   └── ADR-004-hermes-integration.md    ← Decisão arquitetural Hermes
 │   └── legacy-analysis/
 ├── patterns/                        ← Templates de design patterns
 │   ├── controller-pattern.md, service-pattern.md, etc.
@@ -163,6 +199,8 @@ IAgentsFactory/
 │   ├── ia-gro-python-entrypoint.solution.md
 │   └── atualizadorlotofacil-api-sync.solution.md
 ├── skills/                          ← How-to guides técnicos
+│   ├── hermes-integration.md        ← Guia Hermes: uso, config, troubleshooting
+│   ├── engineering-pillars.md       ← Checklists Security, Arch, Quality, DevOps
 │   ├── testing-strategies.md, clean-architecture.md, etc.
 │   ├── knowledge-capture.md         ← Skill de captura/reuso
 │   └── _example-skill.md
@@ -175,6 +213,10 @@ IAgentsFactory/
 │   ├── templates/                   ← Templates core do workflow
 │   ├── presets/                     ← Overrides de templates
 │   └── extensions/                  ← Regras extras para o gate analyze
+├── setup-hermes.ps1                 ← Auto-install Hermes + Ollama + Task Scheduler
+├── hermes-bridge.ps1                ← Orquestrador 3 camadas (motor do comando ask)
+├── hermes-sync.ps1                  ← Sync bidirecional Hermes ↔ Knowledge Hub
+├── hermes-update.ps1                ← Auto-update com backup e rollback
 ├── .mcp.json                        ← Integração MCP Graph Workflow
 ├── new-project.bat                  ← Entry-point do wizard de bootstrap
 ├── new-project.ps1                  ← Wizard greenfield/existente da factory
@@ -216,13 +258,17 @@ IAgentsFactory/
 | `analyze [feature]` | Valida completude estrutural antes de implementar ou capturar |
 | `capture` | Captura solução interativamente |
 | `search "query"` | Busca full-text no Knowledge Hub e registra reuso do melhor match |
-| `search-cross "query"` | Busca em outros projetos registrados, excluindo o projeto atual quando conhecido |
+| `search-cross "query"` | Busca em outros projetos registrados |
 | `stats` | Dashboard de métricas e economia |
 | `projects` | Lista projetos registrados |
 | `export` | Exporta knowledge para JSON (Git sync) |
 | `import [file]` | Importa knowledge de outro dev |
 | `cleanup` | Remove soluções depreciadas |
 | `dashboard` | Abre dashboard da Factory ligado ao knowledge.db |
+| **`ask "pergunta"`** | **Consulta 3 camadas: Hub → Hermes → Externo (custo mínimo)** |
+| `hermes-status` | Verifica status do Hermes Agent local |
+| `hermes-update` | Atualiza Hermes para a última versão |
+| `update-pillars [path]` | Aplica Engineering Pillars em projeto existente |
 
 ### Dashboards Disponiveis
 
@@ -295,7 +341,48 @@ tags: roi, investment
 
 ---
 
+## 🤖 Hermes Agent — IA Local Integrada
+
+### O que é
+Hermes Agent (Nous Research, MIT) é um agente autônomo que roda **dentro do WSL2** no seu Windows, usando modelos **Ollama locais** (llama3.2:3b por padrão) — sem enviar dados para fora da máquina, sem custo por token.
+
+### Instalação (única vez)
+```powershell
+.\setup-hermes.ps1 -Auto
+# Instala WSL2, Hermes, Ollama, modelo llama3.2:3b (~2GB)
+# Registra 2 tarefas no Task Scheduler (update 06:00 + sync 06:30)
+```
+
+### Uso
+```powershell
+.\iagents-factory.ps1 ask "como estruturar um serviço de autenticação"
+.\iagents-factory.ps1 ask "padrão CQRS em NestJS" -Domain backend -Framework nestjs
+.\iagents-factory.ps1 hermes-status    # checar saúde
+.\iagents-factory.ps1 hermes-update    # atualizar
+```
+
+### Kill switch (para debug)
+```powershell
+$env:HERMES_DISABLED = "1"  # pula camada Hermes, vai direto para externo
+$env:HERMES_DISABLED = "0"  # volta ao normal
+```
+
+### Pré-requisitos
+- Windows 10/11 com WSL2
+- 8 GB RAM (mínimo)
+- 4+ GB disco livre
+- Acesso à internet apenas na instalação inicial
+
+> Guia completo: [skills/hermes-integration.md](skills/hermes-integration.md)
+
+---
+
 ## 🔗 Integrações
+
+### Hermes Agent + Ollama (LOCAL — Novo)
+- Agente autônomo rodando no WSL2 com modelo local
+- Camada 2 de resolução: 0 custo externo, privacidade total
+- Auto-update e sincronização de memória via Task Scheduler
 
 ### MCP Graph Workflow
 - Banco SQLite WAL + FTS5 para busca full-text
@@ -338,7 +425,13 @@ R: Não. O mínimo é `setup-ia-squad.ps1` para projetos. A Factory (Knowledge H
 R: Sim. Auto-detecta Java, TypeScript, Python, C#, Go, Rust.
 
 **P: Quanto custa?**  
-R: Zero. SQLite local, sem infra cloud. Economiza tokens ao reutilizar soluções.
+R: Zero. SQLite local + Hermes/Ollama local. Sem infra cloud. A camada 3 (provider externo) só é acionada quando as duas locais não resolvem.
+
+**P: Preciso de internet para o Hermes funcionar?**  
+R: Apenas na instalação inicial. Depois opera completamente offline.
+
+**P: Já uso o IAgentsFactory. Como ativo o Hermes?**  
+R: `git pull` e depois `.\setup-hermes.ps1 -Auto`. Zero breaking changes.
 
 **P: Como medir a economia?**  
 R: `.\iagents-factory.ps1 stats` mostra tokens economizados e custo evitado.
@@ -354,27 +447,32 @@ R: Sim. Existe um wrapper de compatibilidade, mas o comando recomendado agora e 
 ## 📊 Arquitetura
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                   PRESENTATION                          │
-│  VS Code Copilot │ OpenClaude CLI │ MCP Dashboard       │
-├─────────────────────────────────────────────────────────┤
-│                   ORCHESTRATION                         │
-│  Factory CLI │ Capture Pipeline │ Setup Script           │
-├─────────────────────────────────────────────────────────┤
-│                   INTELLIGENCE                          │
-│  FTS5 Search │ RAG (TF-IDF) │ Agent Routing             │
-├─────────────────────────────────────────────────────────┤
-│                   PERSISTENCE                           │
-│  SQLite WAL │ Knowledge Store │ Project Registry         │
-├─────────────────────────────────────────────────────────┤
-│                   PROVIDER                              │
-│  Anthropic │ OpenAI │ DeepSeek │ Ollama │ Copilot       │
-└─────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────┐
+│  PRESENTATION LAYER                                         │
+│  VS Code Copilot │ Factory CLI (PowerShell) │ Dashboard     │
+├─────────────────────────────────────────────────────────────┤
+│  ORCHESTRATION LAYER                                        │
+│  ask │ capture │ search │ spec-workflow │ setup-hermes      │
+├─────────────────────────────────────────────────────────────┤
+│  LOCAL INTELLIGENCE — 3-Layer Resolution                    │
+│  ┌──────────────┐  ┌──────────────┐  ┌───────────────────┐ │
+│  │ Layer 1      │  │ Layer 2      │  │ Layer 3           │ │
+│  │ Knowledge    │→ │ Hermes Agent │→ │ External Provider │ │
+│  │ Hub (FTS5)   │  │ + Ollama     │  │ Claude/GPT/etc    │ │
+│  │ 0 tok │<0.1s │  │ 0 cost│WSL2  │  │ medido │ fallback │ │
+│  └──────────────┘  └──────────────┘  └───────────────────┘ │
+├─────────────────────────────────────────────────────────────┤
+│  PERSISTENCE LAYER                                          │
+│  SQLite WAL │ FTS5 │ learned_solutions │ hermes_sessions    │
+├─────────────────────────────────────────────────────────────┤
+│  GOVERNANCE LAYER                                           │
+│  Engineering Pillars │ SPEC Workflow │ ADRs │ Agents        │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 **Licença:** MIT  
 **Autor:** AR CALHAU  
-**Versão:** 2.0.0 (Factory Edition)
+**Versão:** 3.0.0 (Hermes Edition — Maio 2026)
 
