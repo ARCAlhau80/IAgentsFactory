@@ -76,6 +76,78 @@ Dependência: Fase 4 completa
 Métricas: 2+ devs compartilhando knowledge base
 ```
 
+### Fase H1: Hermes — Instalação Local — ✅ IMPLEMENTADO (Maio 2026)
+```
+Período:    Maio 2026
+Objetivo:   Integrar Hermes Agent como camada 2 de resolução local (0 custo externo)
+Entregas:
+├─ setup-hermes.ps1 — instalação automática com validação de ambiente
+├─ hermes-bridge.ps1 — orquestrador 3 camadas (Hub → Hermes → Externo)
+├─ hermes-sync.ps1 — sincronização bidirecional de memória
+├─ hermes-update.ps1 — atualização automática com backup e rollback
+├─ config/hermes-config.json — configuração centralizada do agente
+├─ ADR-004-hermes-integration.md — decisão arquitetural documentada
+├─ skills/hermes-integration.md — guia de uso e troubleshooting
+├─ iagents-factory.ps1 — comandos ask, hermes-status, hermes-update
+├─ Schema: tabelas hermes_sessions + hermes_escalations
+└─ new-project.ps1 — provisionamento automático de subagente por projeto
+Métricas de Sucesso:
+├─ Resolução local (camadas 1+2) ≥ 70% das consultas
+└─ Zero custo externo para perguntas recorrentes
+```
+
+### Fase H2: Hermes — Auto-Update para Usuários Existentes — ⬜ PLANNED
+```
+Período:    Junho 2026
+Objetivo:   Usuários já instalados recebem updates automaticamente via Git+Task Scheduler
+Entregas:
+├─ GitHub Actions: workflow de release automático com tag semver
+├─ hermes-update.ps1: detecção de nova versão do IAgentsFactory (além do Hermes)
+├─ Notificação via Windows toast quando update disponível
+└─ Script de migração incremental de schema (ALTER TABLE safe)
+Dependência: Fase H1 completa
+Métricas: 100% usuários com versão atual em ≤ 24h após release
+```
+
+### Fase H3: Hermes — Multi-Modelo e Routing Inteligente — ⬜ PLANNED
+```
+Período:    Julho–Agosto 2026
+Objetivo:   Selecionar modelo Ollama dinamicamente por complexidade da query
+Entregas:
+├─ Classificador de complexidade (simples/médio/complexo) via heurística
+├─ Routing: llama3.2:1b → llama3.2:3b → qwen2.5-coder:7b por complexidade
+├─ Métricas de latência e precisão por modelo
+└─ A/B testing entre modelos com qualidade calculada
+Dependência: Fase H2 completa
+Métricas: Latência média < 5s para queries simples
+```
+
+### Fase H4: Hermes — Subagentes por Domínio — ⬜ PLANNED
+```
+Período:    Setembro–Outubro 2026
+Objetivo:   Hermes instâncias isoladas por projeto/domínio com contexto especializado
+Entregas:
+├─ Subagente por projeto com contexto isolado (hermes-projects/<slug>/)
+├─ Knowledge injection automático por domínio na inicialização
+├─ Cross-agent memory sharing (domínios relacionados)
+└─ Dashboard de subagentes ativos e uso por projeto
+Dependência: Fase H3 completa
+Métricas: Precisão aumenta 20%+ com contexto especializado
+```
+
+### Fase H5: Hermes — Fine-tuning e Feedback Loop — ⬜ PLANNED
+```
+Período:    Novembro–Dezembro 2026
+Objetivo:   Melhorar modelo local com feedbacks das respostas capturadas
+Entregas:
+├─ Sistema de rating de respostas (thumbs up/down no CLI)
+├─ Dataset de fine-tuning gerado automaticamente do Knowledge Hub
+├─ Pipeline: Knowledge Hub → dataset JSONL → Ollama fine-tune
+└─ Modelo personalizado IAgentsFactory exportável/compartilhável
+Dependência: Fase H4 completa
+Métricas: Camada 1+2 resolve ≥ 90% das consultas
+```
+
 ---
 
 ## 🏛️ Arquitetura Target

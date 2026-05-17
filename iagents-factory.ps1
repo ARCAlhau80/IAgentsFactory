@@ -22,6 +22,9 @@
 #   .\iagents-factory.ps1 cleanup                 -> Remove soluções stale
 #   .\iagents-factory.ps1 dashboard               -> Abre dashboard MCP Graph
 #   .\iagents-factory.ps1 update-pillars [path]   -> Aplica Engineering Pillars em projeto existente
+#   .\iagents-factory.ps1 ask "pergunta"           -> Consulta 3 camadas: Hub local -> Hermes -> Externo
+#   .\iagents-factory.ps1 hermes-status            -> Verifica status do Hermes Agent local
+#   .\iagents-factory.ps1 hermes-update            -> Atualiza Hermes para a ultima versao
 #
 # REQUER:
 #   - Node.js (para MCP Graph Workflow)
@@ -30,7 +33,7 @@
 
 param(
     [Parameter(Position=0)]
-    [ValidateSet("init","register","constitution","specify","plan","tasks","analyze","capture","search","search-cross","stats","projects","export","import","cleanup","dashboard","update-pillars","help")]
+    [ValidateSet("init","register","constitution","specify","plan","tasks","analyze","capture","search","search-cross","stats","projects","export","import","cleanup","dashboard","update-pillars","ask","hermes-status","hermes-update","help")]
     [string]$Command = "help",
 
     [Parameter(Position=1)]
@@ -984,6 +987,33 @@ CREATE INDEX IF NOT EXISTS idx_solutions_hash ON learned_solutions(content_hash)
 CREATE INDEX IF NOT EXISTS idx_reuse_solution ON reuse_log(solution_id);
 CREATE INDEX IF NOT EXISTS idx_reuse_project ON reuse_log(project_id);
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON learning_sessions(project_id);
+
+-- Tabela de sessoes do Hermes Agent (integracao local)
+CREATE TABLE IF NOT EXISTS hermes_sessions (
+    id TEXT PRIMARY KEY,
+    project_id TEXT REFERENCES factory_projects(id),
+    query TEXT NOT NULL,
+    resolved_by TEXT DEFAULT 'unknown',
+    layer_used INTEGER DEFAULT 3,
+    response_content TEXT DEFAULT '',
+    elapsed_sec REAL DEFAULT 0,
+    tokens_saved INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT (datetime('now','localtime'))
+);
+
+-- Escalacoes para provider externo (para metricas de economia)
+CREATE TABLE IF NOT EXISTS hermes_escalations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    query TEXT NOT NULL,
+    project TEXT DEFAULT '',
+    escalated_at TEXT DEFAULT (datetime('now','localtime')),
+    UNIQUE(query, project)
+);
+
+-- Indice para hermes_sessions
+CREATE INDEX IF NOT EXISTS idx_hermes_sessions_project ON hermes_sessions(project_id);
+CREATE INDEX IF NOT EXISTS idx_hermes_sessions_layer ON hermes_sessions(layer_used);
+CREATE INDEX IF NOT EXISTS idx_hermes_sessions_date ON hermes_sessions(created_at);
 "@
 
     $schemaPath = Join-Path $FACTORY_DIR "schema.sql"
@@ -1751,6 +1781,9 @@ function Invoke-Help {
     Write-Host '    cleanup                  Remove solucoes stale/depreciadas' -ForegroundColor White
     Write-Host '    dashboard [factory|mcp]  Abre dashboard da Factory (padrao) ou MCP Graph' -ForegroundColor White
     Write-Host '    update-pillars [path]    Aplica Engineering Pillars em projeto existente' -ForegroundColor White
+    Write-Host '    ask "pergunta"           Consulta 3 camadas: Hub -> Hermes -> Externo' -ForegroundColor White
+    Write-Host '    hermes-status            Verifica status do Hermes Agent local' -ForegroundColor White
+    Write-Host '    hermes-update            Atualiza Hermes para a ultima versao' -ForegroundColor White
     Write-Host '    help                     Este menu' -ForegroundColor White
     Write-Host ''
     Write-Host '  FLAGS:' -ForegroundColor Yellow
@@ -1780,6 +1813,10 @@ function Invoke-Help {
     Write-Host '    .\iagents-factory.ps1 dashboard' -ForegroundColor DarkGray
     Write-Host '    .\iagents-factory.ps1 dashboard mcp' -ForegroundColor DarkGray
     Write-Host '    .\iagents-factory.ps1 export' -ForegroundColor DarkGray
+    Write-Host '    .\iagents-factory.ps1 ask "como implementar jwt em fastapi"' -ForegroundColor DarkGray
+    Write-Host '    .\iagents-factory.ps1 ask "padrao de repositorio em java" -Domain backend -Language java' -ForegroundColor DarkGray
+    Write-Host '    .\iagents-factory.ps1 hermes-status' -ForegroundColor DarkGray
+    Write-Host '    .\iagents-factory.ps1 hermes-update' -ForegroundColor DarkGray
     Write-Host ''
 }
 
@@ -1920,6 +1957,51 @@ function Invoke-UpdatePillars {
     Write-Info ("  .\iagents-factory.ps1 update-pillars <caminho-do-projeto>")
 }
 
+# --- ASK COMMAND (3-layer resolution) -------------------------
+
+function Invoke-Ask {
+    param([string]$QueryText)
+    if (-not $QueryText) {
+        Write-Warn "Uso: .\iagents-factory.ps1 ask 'sua pergunta'"
+        return
+    }
+    $bridgePath = Join-Path $PSScriptRoot "hermes-bridge.ps1"
+    if (-not (Test-Path $bridgePath)) {
+        Write-Err "hermes-bridge.ps1 nao encontrado. Execute: git pull"
+        return
+    }
+    $args = @("-Query", $QueryText)
+    if ($Domain)    { $args += @("-Domain",    $Domain) }
+    if ($Language)  { $args += @("-Language",  $Language) }
+    if ($Framework) { $args += @("-Framework", $Framework) }
+    # Injetar projeto ativo se disponivel
+    $cfgNow = Get-Config
+    if ($cfgNow.current_project) { $args += @("-Project", $cfgNow.current_project) }
+    & $bridgePath @args
+}
+
+# --- HERMES-STATUS COMMAND ------------------------------------
+
+function Invoke-HermesStatus {
+    $setupPath = Join-Path $PSScriptRoot "setup-hermes.ps1"
+    if (-not (Test-Path $setupPath)) {
+        Write-Err "setup-hermes.ps1 nao encontrado. Execute: git pull"
+        return
+    }
+    & $setupPath -CheckOnly
+}
+
+# --- HERMES-UPDATE COMMAND ------------------------------------
+
+function Invoke-HermesUpdate {
+    $updatePath = Join-Path $PSScriptRoot "hermes-update.ps1"
+    if (-not (Test-Path $updatePath)) {
+        Write-Err "hermes-update.ps1 nao encontrado. Execute: git pull"
+        return
+    }
+    & $updatePath
+}
+
 # --- MAIN DISPATCHER ----------------------------------------
 
 switch ($Command) {
@@ -1940,6 +2022,9 @@ switch ($Command) {
     "cleanup"       { Invoke-Cleanup }
     "dashboard"     { Invoke-Dashboard }
     "update-pillars" { Invoke-UpdatePillars -TargetPath $Arg1 }
+    "ask"            { Invoke-Ask -QueryText $Arg1 }
+    "hermes-status"  { Invoke-HermesStatus }
+    "hermes-update"  { Invoke-HermesUpdate }
     "help"          { Invoke-Help }
     default         { Invoke-Help }
 }

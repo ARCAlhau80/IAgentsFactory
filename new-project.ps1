@@ -931,6 +931,32 @@ New-ProjectContextDocs -Context $context
 Write-Title 'Inicializando workflow SPEC'
 Invoke-FactoryWorkflow -Context $context
 
+# --- Provisionar subagente Hermes para o novo projeto ----------
+$slug = $context.ProjectName -replace '[^a-zA-Z0-9_-]','-'
+$hermesProjectsDir = Join-Path $env:USERPROFILE ".iagents-factory\hermes-projects"
+$hermesProjectDir  = Join-Path $hermesProjectsDir $slug
+
+if (-not (Test-Path $hermesProjectDir)) {
+    try {
+        New-Item -ItemType Directory -Path $hermesProjectDir -Force | Out-Null
+        $yamlContent = @"
+project: $($context.ProjectName)
+slug: $slug
+language: $($context.Language)
+framework: $($context.Framework)
+description: $($context.Description)
+created_at: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')
+hermes_context: enabled
+"@
+        Set-Content -Path (Join-Path $hermesProjectDir "hermes-project.yaml") -Value $yamlContent -Encoding UTF8
+        Write-Host ""
+        Write-Host "  [HERMES] Subagente Hermes provisionado para: $($context.ProjectName)" -ForegroundColor DarkCyan
+        Write-Host "  [HERMES] Use: .\iagents-factory.ps1 ask 'sua pergunta' para consultas com custo zero" -ForegroundColor DarkCyan
+    } catch {
+        # Hermes nao instalado — nao bloqueia o bootstrap
+    }
+}
+
 Write-Ok 'Projeto bootstrapado com sucesso.'
 Write-Info 'O projeto ja saiu registrado, com SPEC inicial, docs, scaffold tecnico e contexto para os agentes.'
 Write-Info ("Proximo passo: abra a pasta {0} no VS Code e continue a feature a partir de specs/." -f $context.ProjectDir)

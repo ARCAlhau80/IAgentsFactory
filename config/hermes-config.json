@@ -1,0 +1,63 @@
+{
+  "_comment": "IAgentsFactory — Hermes Agent Integration Config. Copy to ~/.iagents-factory/hermes-config.json after setup.",
+  "hermes": {
+    "enabled": true,
+    "version_required": "0.14.0",
+    "wsl_distro": "Ubuntu",
+    "install_path": "/usr/local/bin/hermes",
+    "update_check_interval_hours": 24,
+    "auto_update": true,
+    "auto_update_notify_channel": "cli",
+    "backup_before_update": true
+  },
+  "local_model": {
+    "provider": "ollama",
+    "model": "llama3.2:3b",
+    "fallback_model": "qwen2.5-coder:7b",
+    "ollama_url": "http://localhost:11434",
+    "timeout_seconds": 120,
+    "max_retries": 2
+  },
+  "external_providers": [
+    {
+      "name": "claude",
+      "enabled": true,
+      "env_key": "ANTHROPIC_API_KEY",
+      "priority": 1,
+      "use_only_when_local_fails": true
+    },
+    {
+      "name": "openai",
+      "enabled": false,
+      "env_key": "OPENAI_API_KEY",
+      "priority": 2,
+      "use_only_when_local_fails": true
+    }
+  ],
+  "resolution_flow": {
+    "local_hub_threshold": 0.75,
+    "hermes_local_timeout_seconds": 90,
+    "auto_capture_hermes_responses": true,
+    "auto_capture_external_responses": true,
+    "min_quality_to_capture": 0.7
+  },
+  "sync": {
+    "hermes_to_hub_interval_hours": 6,
+    "hub_to_hermes_on_startup": true,
+    "max_memories_to_sync": 500,
+    "sync_log_path": "~/.iagents-factory/hermes-sync.log"
+  },
+  "subagents": {
+    "isolate_by_project": true,
+    "shared_pool_enabled": true,
+    "subagent_memory_dir": "~/.iagents-factory/hermes-projects"
+  },
+  "scheduler": {
+    "enabled": true,
+    "tasks": [
+      { "name": "daily-sync", "cron": "0 6 * * *", "command": "hermes-sync" },
+      { "name": "weekly-cleanup", "cron": "0 8 * * 1", "command": "cleanup-stale" },
+      { "name": "update-check", "cron": "0 9 * * *", "command": "hermes-update-check" }
+    ]
+  }
+}
