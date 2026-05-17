@@ -1,0 +1,15 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Run IAgentsFactory Dashboard",
+			"type": "shell",
+			"command": ".\\iagents-factory.ps1",
+			"args": [
+				"dashboard"
+			],
+			"isBackground": true,
+			"group": "build"
+		}
+	]
+}

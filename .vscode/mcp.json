@@ -1,9 +1,10 @@
-{
+﻿{
     "servers": {
         "iagents-knowledge-hub": {
             "type": "stdio",
             "command": "node",
-            "args": ["${workspaceFolder}/tools/mcp-knowledge-hub/server.js"]
+            "args": ["C:\Users\AR CALHAU\source\repos\IAgentsFactory\tools\mcp-knowledge-hub\server.js"],
+            "env": {}
         }
     }
 }
