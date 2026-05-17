@@ -1,0 +1,9 @@
+{
+    "servers": {
+        "iagents-knowledge-hub": {
+            "type": "stdio",
+            "command": "node",
+            "args": ["${workspaceFolder}/tools/mcp-knowledge-hub/server.js"]
+        }
+    }
+}

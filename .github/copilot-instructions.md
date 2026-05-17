@@ -12,13 +12,29 @@
 
 ---
 
+## 🧠 Knowledge-First Rule (ALWAYS apply in Agent mode)
+
+**ANTES de responder qualquer pergunta técnica, chame a ferramenta MCP `search_knowledge_hub`.**
+
+```
+Fluxo obrigatório:
+1. Chame search_knowledge_hub(query="<pergunta do usuário>")
+2. Se found=true  → use o conteúdo retornado como base da resposta (mencione "resolução local, Layer X")
+3. Se found=false → use seu próprio conhecimento normalmente
+```
+
+Este hub contém soluções reais do projeto indexadas com embeddings vetoriais (nomic-embed-text).
+Busca semântica: encontra soluções mesmo com palavras diferentes. Custo: 0 tokens externos.
+
+---
+
 ## 📌 Core Rules (ALWAYS follow)
 
 <!-- Liste aqui as 3-7 regras mais críticas do seu projeto. 
      Estas regras NUNCA devem ser violadas pelo Copilot. -->
 
 1. ✅ Sempre tratar `IAgentsFactory` como produto separado do ISGT original; o ISGT é a base conceitual, não o nome do produto final.
-2. ✅ Priorizar fluxo knowledge-first: buscar localmente antes de propor chamada a agente externo.
+2. ✅ Priorizar fluxo knowledge-first: chamar `search_knowledge_hub` MCP tool ANTES de qualquer resposta técnica.
 3. ✅ Não acoplar soluções a um projeto único; tudo novo deve considerar reuso multiprojeto e multi-processo.
 4. ✅ Não hardcodar credenciais nem depender de caminhos absolutos em lógica nova quando houver alternativa configurável.
 5. ✅ Scripts, funções e nomes técnicos em inglês; explicações e documentação podem permanecer em português.
