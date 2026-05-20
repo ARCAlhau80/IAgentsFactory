@@ -222,7 +222,9 @@ function Search-LocalHub {
 
     $sql = @"
 SELECT ls.id, ls.domain, ls.pattern, ls.language, ls.framework,
-       ls.solution_summary, ls.solution_content, ls.quality_score,
+       REPLACE(REPLACE(COALESCE(ls.solution_summary,''),char(13),''),char(10),' '),
+       REPLACE(REPLACE(COALESCE(ls.solution_content,''),char(13),''),char(10),' '),
+       ls.quality_score,
        ls.source_agent, ls.source_project,
        rank AS fts_rank
 FROM solutions_fts sf
@@ -234,13 +236,14 @@ ORDER BY ls.quality_score DESC, fts_rank
 LIMIT 3;
 "@
 
-    $rows = & $sqlite -separator "|" $DB_PATH $sql 2>$null
-    if (-not $rows) { return $null }
+    $rawOutput = & $sqlite -separator "|FSEP|" $DB_PATH $sql 2>$null
+    if (-not $rawOutput) { return $null }
 
-    $best = $rows | Select-Object -First 1
+    # Pegar primeira linha (REPLACE garante sem newlines no conteudo)
+    $best = @($rawOutput) | Where-Object { [string]$_ -match '\|FSEP\|' } | Select-Object -First 1
     if (-not $best) { return $null }
 
-    $cols = [string]$best -split '\|', 11
+    $cols = ([string]$best) -split '\|FSEP\|', 12
     if ($cols.Count -lt 8) { return $null }
 
     return [PSCustomObject]@{

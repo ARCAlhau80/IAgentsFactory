@@ -1,4 +1,4 @@
-﻿# ===============================================================
+# ===============================================================
 # IAgentsFactory  -  Knowledge Hub Manager
 #
 # Gerencia o Knowledge Hub local (SQLite + FTS5) para a
@@ -34,7 +34,7 @@
 
 param(
     [Parameter(Position=0)]
-    [ValidateSet("init","register","constitution","specify","plan","tasks","analyze","capture","search","search-cross","stats","projects","export","import","cleanup","dashboard","update-pillars","ask","hermes-status","hermes-update","hermes-provision","embed-index","update-mcp","help")]
+    [ValidateSet("init","register","constitution","specify","plan","tasks","analyze","capture","save","search","search-cross","stats","projects","export","import","cleanup","dashboard","update-pillars","ask","hermes-status","hermes-update","hermes-provision","embed-index","update-mcp","help")]
     [string]$Command = "help",
 
     [Parameter(Position=1)]
@@ -1116,11 +1116,45 @@ function Get-ProjectMetadata {
     $pipfilePath = Join-Path $ProjectPath 'Pipfile'
     $readmePath = Join-Path $ProjectPath 'README.md'
 
-    $pyprojFile = Get-ChildItem -Path $ProjectPath -Filter '*.pyproj' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
-    $csprojFile = Get-ChildItem -Path $ProjectPath -Filter '*.csproj' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
-    $pythonFile = Get-ChildItem -Path $ProjectPath -Filter '*.py' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
-    $powershellFile = Get-ChildItem -Path $ProjectPath -Filter '*.ps1' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
-    $javascriptFile = Get-ChildItem -Path $ProjectPath -Filter '*.js' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
+    # Directories to never scan into (virtual envs, caches, build output, etc.)
+    $skipDirNames = [System.Collections.Generic.HashSet[string]]@(
+        '.venv','venv','env','.env','node_modules','__pycache__','.git',
+        'dist','build','bin','obj','.tox','.pytest_cache','.mypy_cache',
+        'site-packages','.gradle','.idea','.vs','coverage','htmlcov'
+    )
+
+    # Fast helper: scan up to $maxDepth levels, skipping heavy directories
+    function Find-FirstFile {
+        param([string]$Root, [string]$Extension, [int]$MaxDepth = 3, [int]$CurrentDepth = 0)
+        $items = Get-ChildItem -Path $Root -ErrorAction SilentlyContinue
+        foreach ($item in $items) {
+            if ($item.PSIsContainer) {
+                if ($CurrentDepth -lt $MaxDepth -and -not $skipDirNames.Contains($item.Name)) {
+                    $found = Find-FirstFile -Root $item.FullName -Extension $Extension -MaxDepth $MaxDepth -CurrentDepth ($CurrentDepth + 1)
+                    if ($found) { return $found }
+                }
+            } elseif ($item.Extension -eq $Extension) {
+                return $item
+            }
+        }
+        return $null
+    }
+
+    # Root-level files are cheapest to check — do those first
+    $rootFiles = Get-ChildItem -Path $ProjectPath -File -ErrorAction SilentlyContinue
+    $pyprojFile   = $rootFiles | Where-Object { $_.Extension -eq '.pyproj' } | Select-Object -First 1
+    $csprojFile   = $rootFiles | Where-Object { $_.Extension -eq '.csproj' } | Select-Object -First 1
+    $pythonFile   = $rootFiles | Where-Object { $_.Extension -eq '.py'     } | Select-Object -First 1
+    $powershellFile = $rootFiles | Where-Object { $_.Extension -eq '.ps1'  } | Select-Object -First 1
+    $javascriptFile = $rootFiles | Where-Object { $_.Extension -eq '.js'   } | Select-Object -First 1
+
+    # For project types that keep source files in subdirectories, do a bounded scan
+    if (-not $pyprojFile)    { $pyprojFile    = Find-FirstFile -Root $ProjectPath -Extension '.pyproj' -MaxDepth 2 }
+    if (-not $csprojFile)    { $csprojFile    = Find-FirstFile -Root $ProjectPath -Extension '.csproj' -MaxDepth 2 }
+    if (-not $pythonFile)    { $pythonFile    = Find-FirstFile -Root $ProjectPath -Extension '.py'     -MaxDepth 2 }
+    if (-not $powershellFile){ $powershellFile= Find-FirstFile -Root $ProjectPath -Extension '.ps1'    -MaxDepth 2 }
+    if (-not $javascriptFile){ $javascriptFile= Find-FirstFile -Root $ProjectPath -Extension '.js'     -MaxDepth 2 }
+    $javascriptFile = $allFiles | Where-Object { $_.Extension -eq '.js'   } | Select-Object -First 1
 
     if (Test-Path $pomPath) {
         $pomContent = Get-Content $pomPath -Raw -Encoding UTF8 -ErrorAction SilentlyContinue
@@ -1212,7 +1246,7 @@ function Get-ProjectMetadata {
         elseif ($pythonSignalText -match '(?i)sqlite') { $metadata.dbType = 'SQLite' }
         elseif ($pythonSignalText -match '(?i)postgres|psycopg') { $metadata.dbType = 'PostgreSQL' }
         elseif ($pythonSignalText -match '(?i)oracle|cx_oracle') { $metadata.dbType = 'Oracle' }
-        elseif (Get-ChildItem -Path $ProjectPath -Filter '*.db' -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1) { $metadata.dbType = 'SQLite' }
+        elseif (Find-FirstFile -Root $ProjectPath -Extension '.db' -MaxDepth 2) { $metadata.dbType = 'SQLite' }
 
         if (-not $metadata.description -and $pyprojFile) {
             $metadata.description = 'Projeto Python registrado a partir de arquivo .pyproj.'
@@ -1255,6 +1289,8 @@ function Invoke-Register {
     
     if (-not (Test-Path $ProjectPath)) {
         Write-Err "Caminho não encontrado: $ProjectPath"
+        Write-Info 'Dica: use aspas ao redor do caminho se ele contiver espaços.'
+        Write-Info '      Ex: .\iagents-factory.ps1 register "C:\Users\AR CALHAU\repos\Projeto"'
         return
     }
     
@@ -1296,6 +1332,103 @@ ON CONFLICT(name) DO UPDATE SET
     Write-Host ""
 }
 
+# --- AUTO-SAVE COMMAND (nao-interativo, para Camada 3) --------
+
+function Invoke-AutoSave {
+    param(
+        [string]$QueryText,
+        [string]$DomainHint,
+        [string]$PatternHint,
+        [string]$AgentHint,
+        [double]$QualityScore,
+        [string[]]$TagList
+    )
+
+    $sqlite = Get-SqliteCmd
+    if (-not $sqlite) { Write-Error "sqlite3 nao encontrado"; return }
+    if (-not (Test-Path $DB_PATH)) { Write-Error "Hub nao encontrado em $DB_PATH"; return }
+
+    # Ler resposta do arquivo temp
+    $answerFile = Join-Path $FACTORY_DIR "iaf_answer.txt"
+    if (-not (Test-Path $answerFile)) {
+        Write-Error "Arquivo de resposta nao encontrado: $answerFile"
+        Write-Host "  Escreva a resposta em: $answerFile" -ForegroundColor Yellow
+        Write-Host "  Exemplo: `"resposta aqui`" | Out-File `"$answerFile`" -Encoding UTF8" -ForegroundColor Yellow
+        return
+    }
+    $answerContent = Get-Content $answerFile -Raw -Encoding UTF8
+
+    $dom    = if ($DomainHint)  { $DomainHint }  else { "general" }
+    $pat    = if ($PatternHint) { $PatternHint } else { "layer3-auto-capture" }
+    $agent  = if ($AgentHint)   { $AgentHint }   else { "claude-sonnet" }
+    $qual   = if ($QualityScore -gt 0) { $QualityScore } else { 0.80 }
+    $proj   = (Get-Item -LiteralPath $WORKFLOW_ROOT).Name
+
+    # Summary: primeiros 250 chars
+    $summary = ($answerContent -replace '[\r\n]+',' ').Trim()
+    if ($summary.Length -gt 250) { $summary = $summary.Substring(0, 250) + "..." }
+
+    # Hash deduplicacao
+    $hashInput = "$QueryText|$answerContent"
+    $sha   = [System.Security.Cryptography.SHA256]::Create()
+    $hash  = [BitConverter]::ToString($sha.ComputeHash([System.Text.Encoding]::UTF8.GetBytes($hashInput))).Replace('-','').ToLowerInvariant()
+
+    # Tags
+    $autoTags = [regex]::Matches($QueryText,'[\p{L}]{4,}') |
+                ForEach-Object { $_.Value.ToLowerInvariant() } |
+                Select-Object -Unique | Select-Object -First 4
+    $allTags = @($autoTags) + @($TagList | Where-Object { $_ -ne '' }) + @("layer3","auto-capture")
+    $tagsJson = '["' + (($allTags | Select-Object -Unique) -join '","') + '"]'
+
+    $id        = [System.Guid]::NewGuid().ToString("N").Substring(0,16)
+    $safeQ     = $QueryText.Replace("'","''")
+    $safeA     = $answerContent.Replace("'","''")
+    $safeSumm  = $summary.Replace("'","''")
+    $safeTags  = $tagsJson.Replace("'","''")
+    $safeHash  = $hash.Replace("'","''")
+    $safeProj  = $proj.Replace("'","''")
+    $safeAgent = $agent.Replace("'","''")
+    $safePat   = $pat.Replace("'","''")
+
+    $sql = @"
+INSERT OR IGNORE INTO learned_solutions
+  (id, domain, pattern, language, framework, source_project, source_agent,
+   prompt_used, solution_content, solution_summary, content_hash,
+   quality_score, is_validated, tags)
+VALUES
+  ('$id','$dom','$safePat','','','$safeProj','$safeAgent',
+   '$safeQ','$safeA','$safeSumm','$safeHash',
+   $qual, 0, '$safeTags');
+"@
+
+    $result = & $sqlite $DB_PATH $sql 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        Write-Host ""
+        Write-Host "  [OK] Capturado no Knowledge Hub!" -ForegroundColor Green
+        Write-Host "       id=$id  domain=$dom  agent=$agent  quality=$qual" -ForegroundColor Gray
+
+        # Auto-embedding via Ollama (se disponivel)
+        $cfg2 = Get-Config
+        $eUrl   = if ($cfg2.local_model.ollama_url)  { $cfg2.local_model.ollama_url }  else { "http://localhost:11434" }
+        $eModel = if ($cfg2.local_model.embed_model) { $cfg2.local_model.embed_model } else { "nomic-embed-text" }
+        try {
+            $textForEmbed = "$QueryText $($answerContent.Substring(0,[Math]::Min(500,$answerContent.Length)))"
+            $emb = Get-EmbeddingFromOllama -Text $textForEmbed -Url $eUrl -EmbedModel $eModel
+            if ($emb) {
+                $embJson  = ($emb | ConvertTo-Json -Compress).Replace("'","''")
+                $safeEMod = $eModel.Replace("'","''")
+                & $sqlite $DB_PATH "INSERT OR REPLACE INTO solution_embeddings (solution_id, model, embedding, dimensions) VALUES ('$id','$safeEMod','$embJson',$($emb.Count));" 2>$null | Out-Null
+                Write-Host "       Embedding gerado: dims=$($emb.Count)" -ForegroundColor Gray
+            }
+        } catch { <# silencioso se Ollama nao disponivel #> }
+
+        # Limpar arquivo temp
+        Remove-Item $answerFile -Force -ErrorAction SilentlyContinue
+        Write-Host ""
+    } else {
+        Write-Error "Falha ao inserir no Hub: $result"
+    }
+}
 # --- CAPTURE COMMAND -----------------------------------------
 
 function Invoke-Capture {
@@ -1781,6 +1914,7 @@ function Invoke-Help {
     Write-Host '    tasks                    Gera tarefas e publica artefatos no Hub' -ForegroundColor White
     Write-Host '    analyze [feature]        Executa gate de validacao do workflow' -ForegroundColor White
     Write-Host '    capture                  Captura solucao de agente externo' -ForegroundColor White
+    Write-Host '    save "query"             Salva automaticamente resposta Layer 3 (le de $env:TEMP\iaf_answer.txt)' -ForegroundColor White
     Write-Host '    search "query"           Busca solucoes no Knowledge Hub' -ForegroundColor White
     Write-Host '    search-cross "query"     Busca cross-project' -ForegroundColor White
     Write-Host '    stats                    Metricas de economia e reuso' -ForegroundColor White
@@ -2230,13 +2364,18 @@ function Invoke-HermesUpdate {
 
 switch ($Command) {
     "init"         { Invoke-Init }
-    "register"     { Invoke-Register -ProjectPath $Arg1 }
+    "register"     {
+        # Reconstruct path split by spaces when user doesn't quote it
+        $regPath = if ($Arg2 -and $Arg2 -notlike '-*') { "$Arg1 $Arg2" } else { $Arg1 }
+        Invoke-Register -ProjectPath $regPath
+    }
     "constitution" { Invoke-Constitution }
     "specify"      { Invoke-Specify -Description $Arg1 }
     "plan"         { Invoke-Plan -PlanContext $Arg1 }
     "tasks"        { Invoke-Tasks }
     "analyze"      { Invoke-Analyze }
     "capture"      { Invoke-Capture }
+    "save"         { Invoke-AutoSave -QueryText $Arg1 -DomainHint $Domain -PatternHint $Pattern -AgentHint $Agent -QualityScore $Quality -TagList $Tags }
     "search"       { Invoke-Search -Query $Arg1 }
     "search-cross" { Invoke-Search -Query $Arg1 -CrossProject }
     "stats"        { Invoke-Stats }

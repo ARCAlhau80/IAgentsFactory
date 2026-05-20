@@ -242,6 +242,111 @@ wsl -d Ubuntu -- bash -c 'hermes ask "olá, responda em português" 2>/dev/null'
 
 ---
 
+## Operação sem WSL2 / Virtualização Indisponível
+
+Ambientes onde a virtualização está **desabilitada** (política corporativa, BIOS sem suporte, VMs aninhadas) não conseguem instalar distros WSL2 — e portanto não executam o Hermes Agent CLI.
+
+O `hermes-bridge.ps1` detecta isso automaticamente e usa **Ollama Windows nativo** como Camada 2, sem depender do WSL.
+
+### Opções disponíveis
+
+| Situação | Camadas ativas | Como configurar |
+|----------|---------------|----------------|
+| WSL2 indisponível, Ollama Windows instalado | 1 + 2 (nativo) + 3 | `mode: windows-native` no config |
+| WSL2 e Ollama ambos indisponíveis | 1 + 3 | `HERMES_DISABLED=1` |
+| Máquina air-gapped (sem internet) | 1 + 2 (nativo) | desabilitar providers externos no config |
+
+---
+
+### Opção A — Ollama Windows nativo (recomendado)
+
+> **Pré-requisitos:** Ollama instalado em `C:\...\Ollama\ollama.exe` + pelo menos um modelo baixado.
+
+**1. Instalar Ollama para Windows:**
+```
+https://ollama.com/download/windows
+```
+
+**2. Baixar um modelo local:**
+```powershell
+# Modelo leve (2 GB, mais rápido)
+ollama pull llama3.2:3b
+
+# Modelo robusto (13 GB, mais preciso) — já presente se seguiu o setup
+ollama pull gpt-oss:20b
+```
+
+**3. Garantir que o config usa modo nativo:**
+
+Em `~/.iagents-factory/hermes-config.json`, ajuste:
+```json
+"local_model": {
+  "provider": "ollama",
+  "mode": "windows-native",
+  "model": "gpt-oss:20b",
+  "ollama_url": "http://localhost:11434"
+}
+```
+
+**4. Testar:**
+```powershell
+.\hermes-bridge.ps1 -Query "como criar uma API REST" -ForceLayer 2
+```
+
+O bridge acessa `http://localhost:11434` diretamente — sem WSL, sem Hermes CLI.
+
+---
+
+### Opção B — Fluxo 2 camadas (sem Ollama)
+
+Para máquinas sem GPU, com pouca RAM ou onde nenhum modelo local é viável:
+
+```powershell
+# Desabilitar Camada 2 permanentemente
+$env:HERMES_DISABLED = "1"
+
+# Ou no perfil PowerShell (persistente)
+Add-Content $PROFILE "`n`$env:HERMES_DISABLED = '1'"
+```
+
+Fluxo resultante:
+```
+Camada 1 — Knowledge Hub local   (0 tokens, instantaneo)
+          ↓ sem match?
+Camada 3 — Provider externo       (Claude/GPT, custo medido)
+```
+
+Todo resultado da Camada 3 é capturado automaticamente no Hub, tornando futuras consultas gratuitas.
+
+---
+
+### Opção C — Air-gapped (sem internet)
+
+Máquinas isoladas de rede (servidores internos, ambientes de segurança):
+
+```json
+"external_providers": [
+  { "name": "claude",  "enabled": false },
+  { "name": "openai",  "enabled": false }
+]
+```
+
+Fluxo resultante:
+```
+Camada 1 — Knowledge Hub local   (0 tokens)
+          ↓ sem match?
+Camada 2 — Ollama Windows nativo  (0 custo, offline)
+          ↓ sem resposta?
+[STOP]   — sem fallback externo   (retorna vazio com aviso)
+```
+
+Pre-popule o Knowledge Hub com soluções relevantes via seed antes de ir air-gapped:
+```powershell
+.\iagents-factory.ps1 import --file seeds-export.json
+```
+
+---
+
 ## Métricas de Economia
 
 O Knowledge Hub registra quais camadas foram usadas:
