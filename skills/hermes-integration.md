@@ -2,17 +2,61 @@
 
 ## Visao Geral
 
-A integração Hermes adiciona um agente local de IA à IAgentsFactory, criando uma arquitetura de resolução em 3 camadas que elimina dependências de APIs externas pagas para consultas recorrentes:
+A integração Hermes adiciona um agente local de IA à IAgentsFactory, criando uma arquitetura de resolução em **4 etapas progressivas** que elimina dependências de APIs externas pagas para consultas recorrentes.
+
+### Fluxo real de resolução
 
 ```
-Camada 1 — Knowledge Hub local   (SQLite FTS5, 0 tokens, threshold ≥ 0.75)
-          ↓ sem match?
-Camada 2 — Hermes + Ollama local (0 custo externo, timeout 90s)
-          ↓ sem resposta?
-Camada 3 — Provider externo      (Claude/GPT, consumo medido)
+Camada 1a — FTS5 keyword search      (SQLite full-text, 0 tokens, threshold ≥ 0.75)
+           ↓ score baixo ou sem match?
+Camada 1b — Busca vetorial/semantica (Ollama nomic-embed-text → cosine sim no Hub, threshold ≥ 0.72)
+           ↓ sem match semantico?
+Camada 2  — Ollama generativo        (gpt-oss:20b gera resposta nova, Windows nativo, 0 custo externo)
+           ↓ sem resposta ou timeout?
+Camada 3  — Provider externo         (Claude/GPT, custo medido, ultimo recurso)
 ```
 
-Resultados das camadas 2 e 3 são capturados automaticamente no Hub, tornando respostas futuras gratuitas.
+### Diferenca entre 1b e 2
+
+| | Camada 1b | Camada 2 |
+|--|-----------|----------|
+| Modelo Ollama | `nomic-embed-text` (274 MB) | `gpt-oss:20b` (13 GB) |
+| Funcao | Gera embedding da query → busca no Hub | **Gera resposta nova** (nao consulta o Hub) |
+| Resultado | Solucao ja existente no Hub | Resposta inferida pelo LLM local |
+| Custo | 0 tokens externos | 0 tokens externos |
+
+---
+
+## Loop de Aprendizado Continuo
+
+O objetivo central do sistema e **ficar mais inteligente e capaz a cada execucao**. O mecanismo e:
+
+```
+  Consulta nova
+       ↓
+  Camadas 1a / 1b → HIT?  → responde instantaneamente (0 tokens)
+       ↓ miss
+  Camada 2 (Ollama) ou Camada 3 (externo) → gera resposta
+       ↓
+  Auto-captura no Knowledge Hub + gera embedding (nomic-embed-text)
+       ↓
+  Proxima consulta similar → resolve na Camada 1 (gratis, <1s)
+```
+
+**Efeito cumulativo:**
+- Cada resposta da Camada 2 e salva no Hub com embedding vetorial
+- Cada resposta da Camada 3 e salva no Hub com embedding vetorial
+- O Hub cresce organicamente — sem intervencao manual
+- Consultas similares (mesmo que com palavras diferentes) sao capturadas pelo vetor
+- A proporcao Layer1/(Layer2+Layer3) aumenta continuamente com o uso
+
+**Verificar a evolucao:**
+```powershell
+.\iagents-factory.ps1 stats
+# mostra total de solucoes, hits por camada e economia de tokens acumulada
+```
+
+Resultados das camadas 2 e 3 sao capturados automaticamente no Hub, tornando respostas futuras gratuitas.
 
 ---
 
@@ -211,13 +255,13 @@ $env:HERMES_DISABLED = "0"
 ## Troubleshooting
 
 ### "WSL nao disponivel"
-- Verifique se WSL2 está habilitado: `wsl --status`
-- Instale WSL2: `wsl --install`
-- Reinicie o computador após instalação
+- A Camada 2 (Ollama Windows nativo) **nao depende de WSL** — ela funciona sem WSL2
+- WSL2 so e necessario para o Hermes Agent CLI (opcional)
+- Para instalar WSL2: `wsl --install` + reiniciar
 
 ### "Hermes nao instalado no WSL"
-- Execute: `.\setup-hermes.ps1`
-- Se falhar, tente manualmente: `wsl -- bash -c "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash"`
+- Nao impede o funcionamento das camadas 1a, 1b e 2
+- Para instalar o Hermes CLI opcional: `.\setup-hermes.ps1`
 
 ### "Hermes timeout (90s)"
 - O modelo Ollama pode estar carregando pela primeira vez

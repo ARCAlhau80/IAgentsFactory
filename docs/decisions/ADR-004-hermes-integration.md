@@ -21,16 +21,29 @@ O **Hermes Agent** (Nous Research, MIT License) é um agente autônomo open sour
 
 ## Decisão
 
-Integrar o Hermes como **segunda camada de resolução** no fluxo da factory, antes de
-qualquer chamada a provider externo pago. A arquitetura de resolução passa a ser:
+Implementar um fluxo de resolucao progressivo em 4 etapas, priorizando sempre o
+conhecimento local antes de qualquer custo externo. A arquitetura real e:
 
 ```
-[1] Knowledge Hub local (SQLite)   → match ≥ 75%  → resposta instantânea (0 tokens)
-[2] Hermes + modelo local (Ollama)  → resolve?      → captura no Hub    (0 custo)
-[3] Provider externo (Claude/GPT)   → fallback      → captura no Hub    (custo medido)
+[1a] FTS5 keyword search        -> match >= 0.75 -> resposta instantanea (0 tokens, <0.5s)
+[1b] Busca vetorial/semantica   -> sim  >= 0.72 -> resposta instantanea (0 tokens, ~1s)
+     (Ollama nomic-embed-text gera embedding da query; busca por cosine sim no Hub)
+[2]  Ollama generativo          -> resolve?     -> captura no Hub       (0 custo externo)
+     (gpt-oss:20b gera resposta nova via HTTP localhost:11434, Windows nativo)
+[3]  Provider externo           -> fallback     -> captura no Hub       (custo medido)
+     (Claude/GPT, ultimo recurso, sempre capturado para eliminar reuso futuro)
 ```
 
-Todo resultado das camadas 2 e 3 é automaticamente capturado no Knowledge Hub para
+### Loop de aprendizado continuo
+
+O principio central e: **o sistema fica mais inteligente e capaz a cada execucao.**
+
+- Camadas 1a e 1b buscam no Hub (conhecimento acumulado)
+- Camadas 2 e 3 geram respostas novas E as capturam automaticamente no Hub com embedding
+- A cada ciclo, o Hub cresce: proximas consultas similares resolvem via 1a ou 1b
+- A proporcao de resolucoes locais aumenta continuamente sem intervencao manual
+
+Todo resultado das camadas 2 e 3 e automaticamente capturado no Knowledge Hub para
 eliminar chamadas futuras redundantes.
 
 ## Consequências Positivas
@@ -43,16 +56,18 @@ eliminar chamadas futuras redundantes.
 
 ## Consequências Negativas / Riscos
 
-- Requer WSL2 no Windows — ambientes sem WSL2 fazem fallback direto para camada 3
-- Hermes v0.14.0 ainda em maturação — breaking changes possíveis
-- Modelos Ollama locais consomem RAM/GPU — ambientes limitados usam providers remotos
+- Camadas 1b e 2 dependem do Ollama estar rodando (Windows nativo ou WSL)
+- Modelo gpt-oss:20b consome ~13 GB de RAM/VRAM na camada 2
+- Hub cresce indefinidamente — exige manutencao periodica (`cleanup` command)
+- WSL2 requerido apenas para o Hermes Agent CLI opcional (nao para o fluxo principal)
 
-## Mitigações
+## Mitigacoes
 
-- `setup-hermes.ps1` valida requisitos antes de instalar (WSL2, RAM, espaço em disco)
-- Flag `$env:HERMES_DISABLED = "1"` desativa Hermes e pula direto para camada 3
-- `hermes-update.ps1` faz backup da config antes de atualizar
-- Todos os erros do Hermes são capturados com fallback silencioso para camada 3
+- `hermes-bridge.ps1` detecta Ollama indisponivel e faz fallback silencioso para camada 3
+- Flag `$env:HERMES_DISABLED = "1"` pula camada 2 diretamente
+- Para ambientes sem Ollama: fluxo opera em 2 camadas (1a/1b hub + externo)
+- Para ambientes air-gapped: providers externos desabilitados no config
+- `setup-hermes.ps1` valida requisitos antes de instalar (WSL2, RAM, espaco em disco)
 
 ## Componentes criados/modificados
 
