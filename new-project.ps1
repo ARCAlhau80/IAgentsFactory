@@ -239,9 +239,9 @@ function Get-ProjectRecommendations {
         $detectedProjectType = 'cli'
     } elseif ($context -match '\betl\b|pipeline|ingestao|ingestion|data.lake|data.warehouse|spark|airflow') {
         $detectedProjectType = 'data-pipeline'
-    } elseif ($context -match '\bml\b|machine.learning|\bia\b|\bai\b|modelo de|treinamento|inferencia|inference|predicao|prediction|nlp|llm') {
+    } elseif ($context -match '\bml\b|machine.learning|\bia\b|\bai\b|modelo.de|treinamento|inferencia|inference|predicao|prediction|\bnlp\b|\bllm\b|\bgpt\b|\bllama\b|langchain|crewai|autogen|agente.autonom|autonom\w*.agente|\bnpc\b|nao.jogavel|personagem.controlado|\bvoz\b|\bvoice\b|reconhecimento.de.voz|speech.recogni|mestre.da.partida|game.?master|\brpg\b.*agente|agente.*\brpg\b|interpretacao.de.papel|agente.inteligente|agente.ia|ia.agente') {
         $detectedProjectType = 'ml'
-    } elseif ($context -match 'dashboard|relatorio|report|frontend|spa|react|angular|vue') {
+    } elseif ($context -match 'dashboard|relatorio|report|frontend|\bspa\b|\breact\b|\bangular\b|\bvue\b') {
         $detectedProjectType = 'frontend'
     }
 
@@ -279,15 +279,30 @@ function Get-ProjectRecommendations {
         $recommendedKey = 'aspnet'
     } elseif ($context -match '\bnode\b|nodejs|\btypescript\b|\bjavascript\b|\bexpress\b|\bnest\b') {
         $recommendedKey = 'express'
-    } elseif ($context -match '\bpython\b|\bfastapi\b|\bdjango\b|\bflask\b|\buvicorn\b') {
+    } elseif ($context -match '\bpython\b|\bfastapi\b|\bdjango\b|\bflask\b|\buvicorn\b|langchain|crewai|autogen|\bpandas\b|\bnumpy\b|\bscikit\b|\btorch\b|\btensorflow\b') {
         $recommendedKey = 'fastapi'
     } elseif ($context -match 'robustez corporativa|enterprise|high.throughput|governanca.rigida|escala operacional') {
         $recommendedKey = 'spring-boot'
     }
 
-    # Se nao detectou preferencia clara, recomendar fastapi como default de MVP
+    # Projetos ML/IA/Voz sem linguagem explicita: sugerir Python (fastapi)
+    # mas sinalizar que a stack de orquestracao precisa ser definida
+    $needsCustomStack = $false
     if (-not $recommendedKey) {
-        $recommendedKey = 'fastapi'
+        if ($detectedProjectType -eq 'ml') {
+            $recommendedKey = 'fastapi'
+            $needsCustomStack = $true   # sinaliza que o usuario deve revisar
+        } elseif ($detectedProjectType -in @('cli', 'data-pipeline')) {
+            $recommendedKey = 'fastapi'
+            $needsCustomStack = $true
+        } else {
+            $recommendedKey = 'fastapi'  # default para API generica
+        }
+    }
+
+    # Ajustar reason do FastAPI para contextos ML/IA/Voz
+    if ($detectedProjectType -eq 'ml' -and $recommendedKey -eq 'fastapi') {
+        $stackProfiles['fastapi'].Reason = 'Python e ideal para IA/ML. FastAPI serve como camada de API/inferencia. Adicione LangChain, OpenAI SDK, SpeechRecognition, CrewAI etc. conforme necessidade do agente.'
     }
 
     if ($StackPreference -and $StackPreference -notmatch '^\s*$|aberto|sugest') {
@@ -301,12 +316,14 @@ function Get-ProjectRecommendations {
     }
 
     return [pscustomobject]@{
-        RecommendedStack = $stackProfiles[$recommendedKey]
-        AvailableStacks = @($stackProfiles['fastapi'], $stackProfiles['spring-boot'], $stackProfiles['express'], $stackProfiles['aspnet'])
-        Architecture = $effectiveArch
-        Patterns = $effectivePatterns
-        Risks = $effectiveRisks
-        Agents = @('ARCHITECT', 'BACKEND', 'QA', 'OBSERVABILITY', 'KNOWLEDGE')
+        RecommendedStack  = $stackProfiles[$recommendedKey]
+        AvailableStacks   = @($stackProfiles['fastapi'], $stackProfiles['spring-boot'], $stackProfiles['express'], $stackProfiles['aspnet'])
+        Architecture      = $effectiveArch
+        Patterns          = $effectivePatterns
+        Risks             = $effectiveRisks
+        Agents            = @('ARCHITECT', 'BACKEND', 'QA', 'OBSERVABILITY', 'KNOWLEDGE')
+        DetectedType      = $detectedProjectType
+        NeedsCustomStack  = $needsCustomStack
     }
 }
 
@@ -329,25 +346,57 @@ function Select-StackProfile {
     }
 
     Write-Title 'Sugestao da Factory'
-    Write-Info ("Stack recomendada: {0}" -f $Recommendations.RecommendedStack.Label)
-    Write-Info ("Motivo: {0}" -f $Recommendations.RecommendedStack.Reason)
-    Write-Info ("Arquitetura recomendada: {0}" -f $Recommendations.Architecture)
-    Write-Info ("Patterns aplicaveis: {0}" -f ($Recommendations.Patterns -join ', '))
-    Write-Info ("Riscos principais: {0}" -f ($Recommendations.Risks -join '; '))
-    Write-Info ("Agentes iniciais: {0}" -f ($Recommendations.Agents -join ', '))
+    Write-Host ("  Tipo de projeto detectado : {0}" -f $Recommendations.DetectedType.ToUpper()) -ForegroundColor Cyan
+    Write-Host ("  Arquitetura recomendada   : {0}" -f $Recommendations.Architecture) -ForegroundColor Cyan
     Write-Host ''
+
+    # Aviso especial para projetos que nao sao simples APIs REST
+    if ($Recommendations.NeedsCustomStack) {
+        Write-Host '  [ATENCAO] Nenhuma linguagem/framework explicito foi detectado no contexto.' -ForegroundColor Yellow
+        Write-Host '  A opcao abaixo e uma sugestao de ponto de partida para a camada de API.' -ForegroundColor Yellow
+        Write-Host '  Para o core do projeto (orquestracao, voz, IA, pipeline...) voce precisa' -ForegroundColor Yellow
+        Write-Host '  adicionar as bibliotecas e ferramentas especificas manualmente.' -ForegroundColor Yellow
+        Write-Host '  Considere a opcao [5] Outro/N/A se quiser definir tudo do zero.' -ForegroundColor Yellow
+        Write-Host ''
+    }
+
+    if ($Recommendations.DetectedType -eq 'ml') {
+        Write-Host '  Sugestoes de bibliotecas para projetos ML/IA/Voz:' -ForegroundColor DarkGray
+        Write-Host '    LangChain / LangGraph  -> orquestracao de agentes LLM' -ForegroundColor DarkGray
+        Write-Host '    CrewAI / AutoGen       -> multi-agente autonomo' -ForegroundColor DarkGray
+        Write-Host '    OpenAI / Ollama SDK    -> modelos de linguagem' -ForegroundColor DarkGray
+        Write-Host '    SpeechRecognition / Whisper -> reconhecimento de voz' -ForegroundColor DarkGray
+        Write-Host '    pyttsx3 / gTTS         -> sintese de voz (TTS)' -ForegroundColor DarkGray
+        Write-Host '    FastAPI                -> camada HTTP/WebSocket para expor o agente' -ForegroundColor DarkGray
+        Write-Host ''
+    }
+
+    Write-Info ("Stack recomendada : {0}" -f $Recommendations.RecommendedStack.Label)
+    Write-Info ("Motivo            : {0}" -f $Recommendations.RecommendedStack.Reason)
+    Write-Info ("Patterns          : {0}" -f ($Recommendations.Patterns -join ', '))
+    Write-Info ("Riscos            : {0}" -f ($Recommendations.Risks -join '; '))
+    Write-Host ''
+
+    # Calcular o indice default com base na stack recomendada
+    $keyToIdx = @{ 'fastapi' = 1; 'spring-boot' = 2; 'express' = 3; 'aspnet' = 4 }
+    $recIdx = if ($keyToIdx.ContainsKey($Recommendations.RecommendedStack.Key)) { $keyToIdx[$Recommendations.RecommendedStack.Key] } else { 5 }
+    # Para projetos nao-API sem linguagem clara, sugerir N/A como default
+    $defaultIdx = if ($Recommendations.NeedsCustomStack) { '5' } else { [string]$recIdx }
+
     Write-Host '  Opcoes de stack:' -ForegroundColor Yellow
     $index = 1
     foreach ($stack in $Recommendations.AvailableStacks) {
-        Write-Host ("    [{0}] {1}" -f $index, $stack.Label) -ForegroundColor White
+        $marker = if ($index -eq $recIdx -and -not $Recommendations.NeedsCustomStack) { ' <-- SUGERIDA' } else { '' }
+        $color  = if ($index -eq $recIdx -and -not $Recommendations.NeedsCustomStack) { 'Green' } else { 'White' }
+        Write-Host ("    [{0}] {1}{2}" -f $index, $stack.Label, $marker) -ForegroundColor $color
         $index++
     }
+    $na5Marker = if ($Recommendations.NeedsCustomStack) { ' <-- SUGERIDA para este tipo de projeto' } else { '' }
+    $na5Color  = if ($Recommendations.NeedsCustomStack) { 'Green' } else { 'White' }
+    Write-Host ("    [5] Outro / N/A (definir manualmente){0}" -f $na5Marker) -ForegroundColor $na5Color
     Write-Host ''
 
-    Write-Host "    [5] Outro / N/A (definir manualmente)" -ForegroundColor White
-    Write-Host ''
-
-    $choice = Read-Choice -Prompt '  Escolha a stack sugerida ou alternativa' -ValidOptions @('1','2','3','4','5') -Default '1'
+    $choice = Read-Choice -Prompt "  Escolha a stack (default: [$defaultIdx])" -ValidOptions @('1','2','3','4','5') -Default $defaultIdx
 
     if ($choice -eq '5') {
         $customLang      = Read-Value -Prompt '  Linguagem (ex: Python, Go, Rust, Bash; deixe vazio para N/A)' -Default 'N/A'
