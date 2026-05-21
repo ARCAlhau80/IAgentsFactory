@@ -96,6 +96,87 @@ function Get-TokenEstimate {
     return [math]::Ceiling($Text.Length / 4)
 }
 
+# ---------------------------------------------------------------
+# Security validation — applied before ANY content is ingested
+# into the Knowledge Hub (file, clipboard, git, batch).
+#
+# Detects:
+#   - Prompt injection / instruction smuggling
+#   - Dynamic code execution (PowerShell IEX, Python eval, etc.)
+#   - Download-and-execute patterns
+#   - Destructive file operations
+#   - Credential / secret exfiltration attempts
+#   - Obfuscation via invisible Unicode characters
+# ---------------------------------------------------------------
+function Test-ContentSecurity {
+    param(
+        [string]$Content,
+        [string]$Context = 'content'
+    )
+
+    $findings = [System.Collections.Generic.List[string]]::new()
+
+    # -- Prompt injection & instruction smuggling ----------------
+    $injectionRules = @(
+        @{ P = '(?i)(ignore|disregard|forget|override)\s+(previous|all|above|prior|your|these|any)\s+(instructions?|rules?|constraints?|guidelines?|context|prompts?|directives?)';
+           L = 'PromptInjection: override/ignore instructions' }
+        @{ P = '(?i)(you\s+are\s+now\s+a|act\s+as\s+(a\s+|an\s+)?\w+\s+without|pretend\s+(you\s+are|to\s+be)\s+(a\s+|an\s+)?\w+\s+(without|that))';
+           L = 'PromptInjection: persona override (jailbreak pattern)' }
+        @{ P = '(?i)(new\s+instructions?:|updated\s+instructions?:|<\s*system\s*>|<\s*/?\s*instructions?\s*>|\[system\s*prompt\]|\[override\])';
+           L = 'PromptInjection: hidden system/instruction tag' }
+        @{ P = '(?i)(jailbreak|bypass\s+(safety|filter|restriction|guardrail|moderation|alignment)|DAN\s+mode|developer\s+mode\s+enabled)';
+           L = 'PromptInjection: explicit jailbreak or bypass keyword' }
+        @{ P = '(?i)(from\s+now\s+on\s+you|henceforth\s+you|your\s+(true\s+purpose|real\s+instructions?|new\s+(role|name|directive)))';
+           L = 'PromptInjection: instruction smuggling (role redefinition)' }
+        @{ P = '[\u200b\u200c\u200d\u200e\u200f\u202a-\u202e\ufeff]{3,}';
+           L = 'PromptInjection: excessive invisible/directional Unicode (obfuscation)' }
+    )
+
+    # -- Malicious code execution --------------------------------
+    $execRules = @(
+        @{ P = '(?i)\binvoke-expression\s*[\(\$"''`]|\biex\s*[\(\$"''`]';
+           L = 'MaliciousCode: PowerShell dynamic eval (Invoke-Expression / iex)' }
+        @{ P = "(?i)(invoke-webrequest|irm|curl|wget)\s+['\"]?https?://\S+['\"]?\s*\|\s*(iex|invoke-expression|bash|sh\b|cmd\b|python\b|node\b)";
+           L = 'MaliciousCode: download-and-execute (pipe to shell)' }
+        @{ P = '(?i)\[system\.net\.(webclient|httpclient)\]\s*::\s*(downloadstring|downloadfile)\s*\(';
+           L = 'MaliciousCode: .NET WebClient covert download' }
+        @{ P = '(?i)\[convert\]\s*::\s*frombase64string\s*\(.{0,200}\)\s*[\|;\n]?\s*(iex|invoke-expression|&\s*\()';
+           L = 'MaliciousCode: Base64 decode followed by execution' }
+        @{ P = '(?i)(eval|exec)\s*\(\s*(base64|__import__|compile\s*\(|bytes\.fromhex)';
+           L = 'MaliciousCode: Python obfuscated execute (eval+base64/import)' }
+        @{ P = '(?i)os\.(system|popen)\s*\(|subprocess\.(popen|call|run|check_output)\s*\(.*shell\s*=\s*True';
+           L = 'MaliciousCode: Python shell execution (os.system / subprocess shell=True)' }
+        @{ P = '(?i)(start-process|& cmd\.exe|powershell\.exe|pwsh\.exe)\s+.{0,80}(-windowstyle\s+hidden|-noprofile\s+-noninteractive|-enc\b|-encoded)';
+           L = 'MaliciousCode: hidden/encoded process execution' }
+        @{ P = '(?i)(rm\s+-rf\s+[/~]|Remove-Item\s+.*-Recurse\s+.*-Force\s+.*[Cc]:\\|del\s+/[sqfSQF]\s+[Cc]:\\)';
+           L = 'MaliciousCode: destructive recursive delete on system paths' }
+    )
+
+    # -- Data exfiltration / hardcoded secrets -------------------
+    $exfilRules = @(
+        @{ P = "(?i)(invoke-webrequest|irm|curl|wget)\s+[^\n]{0,60}\`\$env:(USERNAME|USERPROFILE|COMPUTERNAME|APPDATA|PATH|TEMP|HOMEDRIVE)";
+           L = 'Exfiltration: environment variable sent to external URL' }
+        @{ P = "(?i)(password|passwd|secret|api[_-]?key|access[_-]?token|private[_-]?key)\s*=\s*['\"`][^'\"`\s]{8,}";
+           L = 'Security: potential hardcoded credential or secret' }
+    )
+
+    foreach ($rule in ($injectionRules + $execRules + $exfilRules)) {
+        if ([regex]::IsMatch($Content, $rule.P)) {
+            $findings.Add($rule.L)
+        }
+    }
+
+    $hasCritical = $findings | Where-Object { $_ -match '^(MaliciousCode|Exfiltration):' }
+    $severity = if ($findings.Count -eq 0) { 'none' } elseif ($hasCritical) { 'critical' } else { 'high' }
+
+    return [pscustomobject]@{
+        IsClean  = ($findings.Count -eq 0)
+        Severity = $severity
+        Findings = @($findings)
+        Context  = $Context
+    }
+}
+
 function Invoke-SqlNonQuery {
     param([string]$Query)
 
@@ -272,6 +353,21 @@ function Import-FromFile {
     }
 
     Write-Pipeline ("Importing from: {0}" -f $FilePath)
+
+    # --- Pre-ingestion security validation ----------------------
+    $rawContent = Get-Content -Path $FilePath -Raw -Encoding UTF8
+    $secCheck   = Test-ContentSecurity -Content $rawContent -Context (Split-Path $FilePath -Leaf)
+    if (-not $secCheck.IsClean) {
+        $findingsText = $secCheck.Findings -join ' | '
+        Write-Host ("  [SECURITY] {0} findings in [{1}]:" -f $secCheck.Severity.ToUpper(), $secCheck.Context) -ForegroundColor Red
+        foreach ($f in $secCheck.Findings) {
+            Write-Host ("    - {0}" -f $f) -ForegroundColor Yellow
+        }
+        Write-TraceLog ("Security block: severity={0} context={1} findings={2}" -f $secCheck.Severity, $secCheck.Context, $findingsText)
+        throw ("SECURITY BLOCK: content rejected [{0}] — {1}" -f $secCheck.Context, $findingsText)
+    }
+    # ------------------------------------------------------------
+
     $data = Parse-SolutionFile -FilePath $FilePath
     if ([string]::IsNullOrWhiteSpace($data.solution)) {
         throw "File does not contain a ## Solution section"

@@ -233,20 +233,64 @@ function Get-ProjectRecommendations {
         }
     }
 
-    $recommendedKey = 'fastapi'
-    if ($context -match 'java|spring') {
+    # --- Detectar tipo de projeto para recomendar arquitetura adequada ---
+    $detectedProjectType = 'api'
+    if ($context -match '\bcli\b|command.line|linha.de.comando|\bscript\b|automacao|automation|\bcron\b|agendado|scheduled|batch') {
+        $detectedProjectType = 'cli'
+    } elseif ($context -match '\betl\b|pipeline|ingestao|ingestion|data.lake|data.warehouse|spark|airflow') {
+        $detectedProjectType = 'data-pipeline'
+    } elseif ($context -match '\bml\b|machine.learning|\bia\b|\bai\b|modelo de|treinamento|inferencia|inference|predicao|prediction|nlp|llm') {
+        $detectedProjectType = 'ml'
+    } elseif ($context -match 'dashboard|relatorio|report|frontend|spa|react|angular|vue') {
+        $detectedProjectType = 'frontend'
+    }
+
+    $architectureByType = @{
+        'api'           = 'Layered REST API + Controller + Service + Repository + DTO'
+        'cli'           = 'CLI + Command Handler + Service Layer + Output Formatter'
+        'data-pipeline' = 'Batch Pipeline + Source Connector + Transform + Sink + Observability'
+        'ml'            = 'ML Pipeline + Feature Engineering + Model Wrapper + Inference Endpoint'
+        'frontend'      = 'Component Layer + State Management + API Client + View Layer'
+    }
+    $patternsByType = @{
+        'api'           = @('controller-pattern', 'service-pattern', 'dto-pattern', 'repository-pattern', 'adapter/provider boundary')
+        'cli'           = @('command-pattern', 'service-pattern', 'strategy-pattern')
+        'data-pipeline' = @('pipeline-pattern', 'adapter/provider boundary', 'observer-pattern')
+        'ml'            = @('pipeline-pattern', 'strategy-pattern', 'adapter/provider boundary')
+        'frontend'      = @('component-pattern', 'observer-pattern', 'factory-pattern')
+    }
+    $risksByType = @{
+        'api'           = @('Validacao de payload', 'Autenticacao e autorizacao', 'Rate limiting', 'Observabilidade de requests', 'Versionamento de API')
+        'cli'           = @('Validacao de argumentos', 'Tratamento de erros e exit codes', 'Logging estruturado', 'Compatibilidade de SO')
+        'data-pipeline' = @('Idempotencia das etapas', 'Reprocessamento parcial', 'Schema evolution', 'Monitoramento de lag', 'Volume de dados')
+        'ml'            = @('Drift de dados/modelo', 'Latencia de inferencia', 'Reproducibilidade de treino', 'Versionamento de modelo', 'Fairness e bias')
+        'frontend'      = @('XSS e injection', 'Gerenciamento de estado', 'Performance de bundle', 'Acessibilidade', 'Compatibilidade de browsers')
+    }
+
+    $effectiveArch     = $architectureByType[$detectedProjectType]
+    $effectivePatterns = $patternsByType[$detectedProjectType]
+    $effectiveRisks    = $risksByType[$detectedProjectType]
+
+    # --- Recomendar stack com base em contexto ---
+    $recommendedKey = ''
+    if ($context -match '\bjava\b|\bspring\b') {
         $recommendedKey = 'spring-boot'
-    } elseif ($context -match 'c#|dotnet|\.net|asp.net') {
+    } elseif ($context -match '\bc#\b|csharp|\bdotnet\b|\.net\b|\basp\.net\b') {
         $recommendedKey = 'aspnet'
-    } elseif ($context -match 'node|typescript|javascript|express|nest') {
+    } elseif ($context -match '\bnode\b|nodejs|\btypescript\b|\bjavascript\b|\bexpress\b|\bnest\b') {
         $recommendedKey = 'express'
-    } elseif ($context -match 'robustez corporativa|enterprise|high throughput|governanca rigida') {
+    } elseif ($context -match '\bpython\b|\bfastapi\b|\bdjango\b|\bflask\b|\buvicorn\b') {
+        $recommendedKey = 'fastapi'
+    } elseif ($context -match 'robustez corporativa|enterprise|high.throughput|governanca.rigida|escala operacional') {
         $recommendedKey = 'spring-boot'
-    } elseif ($context -match 'mvp|prototipo|rapido|json|microservice|microservico|rota|route') {
+    }
+
+    # Se nao detectou preferencia clara, recomendar fastapi como default de MVP
+    if (-not $recommendedKey) {
         $recommendedKey = 'fastapi'
     }
 
-    if ($StackPreference) {
+    if ($StackPreference -and $StackPreference -notmatch '^\s*$|aberto|sugest') {
         $preference = $StackPreference.ToLowerInvariant()
         foreach ($key in $stackProfiles.Keys) {
             if ($preference -match [regex]::Escape($key) -or $preference -match [regex]::Escape($stackProfiles[$key].Framework.ToLowerInvariant()) -or $preference -match [regex]::Escape($stackProfiles[$key].Language.ToLowerInvariant())) {
@@ -259,9 +303,9 @@ function Get-ProjectRecommendations {
     return [pscustomobject]@{
         RecommendedStack = $stackProfiles[$recommendedKey]
         AvailableStacks = @($stackProfiles['fastapi'], $stackProfiles['spring-boot'], $stackProfiles['express'], $stackProfiles['aspnet'])
-        Architecture = 'Layered REST API + DTO + Service + Provider Adapters + Repository boundary'
-        Patterns = @('controller-pattern', 'service-pattern', 'dto-pattern', 'repository-pattern', 'adapter/provider boundary')
-        Risks = @('Validacao de payload JSON', 'Abstracao de provedores de rota', 'Timeout e fallback de calculo', 'Observabilidade e rastreio de requests', 'Cache e versionamento de parametros')
+        Architecture = $effectiveArch
+        Patterns = $effectivePatterns
+        Risks = $effectiveRisks
         Agents = @('ARCHITECT', 'BACKEND', 'QA', 'OBSERVABILITY', 'KNOWLEDGE')
     }
 }
@@ -300,7 +344,31 @@ function Select-StackProfile {
     }
     Write-Host ''
 
-    $choice = Read-Choice -Prompt '  Escolha a stack sugerida ou alternativa' -ValidOptions @('1','2','3','4') -Default '1'
+    Write-Host "    [5] Outro / N/A (definir manualmente)" -ForegroundColor White
+    Write-Host ''
+
+    $choice = Read-Choice -Prompt '  Escolha a stack sugerida ou alternativa' -ValidOptions @('1','2','3','4','5') -Default '1'
+
+    if ($choice -eq '5') {
+        $customLang      = Read-Value -Prompt '  Linguagem (ex: Python, Go, Rust, Bash; deixe vazio para N/A)' -Default 'N/A'
+        $customFramework = Read-Value -Prompt '  Framework (ex: Django, Gin; deixe vazio para N/A)' -Default 'N/A'
+        $customBuild     = Read-Value -Prompt '  Comando de build' -Default 'N/A'
+        $customTest      = Read-Value -Prompt '  Comando de test' -Default 'N/A'
+        $customRun       = Read-Value -Prompt '  Comando de run/start' -Default 'N/A'
+        $customLabel     = if ($customFramework -and $customFramework -ne 'N/A') { "$customFramework ($customLang)" } else { $customLang }
+        return [pscustomobject]@{
+            Key       = 'custom'
+            Label     = $customLabel
+            Language  = $customLang
+            Framework = $customFramework
+            BuildCmd  = $customBuild
+            TestCmd   = $customTest
+            RunCmd    = $customRun
+            DbType    = 'N/A'
+            Reason    = 'Stack definida manualmente pelo usuario.'
+        }
+    }
+
     return $Recommendations.AvailableStacks[[int]$choice - 1]
 }
 
@@ -367,22 +435,16 @@ pytest==8.3.5
     Set-TextFile -Path (Join-Path $Context.ProjectDir "src\$module\main.py") -Content @"
 from fastapi import FastAPI
 from pydantic import BaseModel, Field
+from typing import Any
 
 
-class RouteRequest(BaseModel):
-    origin: str = Field(..., description='Cidade ou ponto de origem')
-    destination: str = Field(..., description='Cidade ou ponto de destino')
-    cargo_type: str | None = None
-    priority: str | None = None
-    avoid_tolls: bool = False
+class InputPayload(BaseModel):
+    data: dict[str, Any] = Field(default_factory=dict, description='Dados de entrada do servico')
 
 
-class RouteOption(BaseModel):
-    route_id: str
-    distance_km: float
-    estimated_minutes: int
-    estimated_cost: float
-    notes: str
+class OutputPayload(BaseModel):
+    status: str = 'ok'
+    result: dict[str, Any] = Field(default_factory=dict, description='Resultado processado')
 
 
 app = FastAPI(
@@ -397,17 +459,10 @@ def health() -> dict:
     return {'status': 'ok', 'service': '$($Context.ProjectName)'}
 
 
-@app.post('/routes/calculate', response_model=list[RouteOption])
-def calculate_routes(payload: RouteRequest) -> list[RouteOption]:
-    return [
-        RouteOption(
-            route_id='demo-route-001',
-            distance_km=120.5,
-            estimated_minutes=140,
-            estimated_cost=189.9,
-            notes=f'Placeholder inicial para rota entre {payload.origin} e {payload.destination}.'
-        )
-    ]
+@app.post('/process', response_model=OutputPayload)
+def process(payload: InputPayload) -> OutputPayload:
+    # TODO: implementar logica de negocio aqui
+    return OutputPayload(status='ok', result={'message': 'placeholder - implemente a logica de negocio'})
 "@
 
     Set-TextFile -Path (Join-Path $Context.ProjectDir 'tests\test_health.py') -Content @"
@@ -421,6 +476,12 @@ client = TestClient(app)
 
 def test_health() -> None:
     response = client.get('/health')
+    assert response.status_code == 200
+    assert response.json()['status'] == 'ok'
+
+
+def test_process_placeholder() -> None:
+    response = client.post('/process', json={'data': {}})
     assert response.status_code == 200
     assert response.json()['status'] == 'ok'
 "@
@@ -462,22 +523,15 @@ app.get('/health', (request, response) => {
   response.json({ status: 'ok', service: '$($Context.ProjectName)' });
 });
 
-app.post('/routes/calculate', (request, response) => {
-  const { origin, destination } = request.body;
-  response.json([
-    {
-      routeId: 'demo-route-001',
-      distanceKm: 120.5,
-      estimatedMinutes: 140,
-      estimatedCost: 189.9,
-      notes: `Placeholder inicial para rota entre ${origin} e ${destination}.`
-    }
-  ]);
+// TODO: implementar logica de negocio aqui
+app.post('/process', (request, response) => {
+  const { data } = request.body;
+  response.json({ status: 'ok', result: { message: 'placeholder - implemente a logica de negocio', received: data } });
 });
 
 const port = process.env.PORT || 3000;
 app.listen(port, () => {
-  console.log(`$($Context.ProjectName) listening on port ${port}`);
+  console.log(`$($Context.ProjectName) listening on port \${port}`);
 });
 "@
 
@@ -487,6 +541,11 @@ const assert = require('node:assert/strict');
 
 test('placeholder health test', () => {
   assert.equal('ok', 'ok');
+});
+
+test('placeholder process test', () => {
+  // TODO: adicionar testes de integracao para o endpoint /process
+  assert.ok(true);
 });
 "@
 
@@ -555,7 +614,6 @@ function Initialize-SpringBootScaffold {
     Set-TextFile -Path (Join-Path $Context.ProjectDir "src\main\java\$packagePath\$className.java") -Content @"
 package $packageName;
 
-import java.util.List;
 import java.util.Map;
 
 import org.springframework.boot.SpringApplication;
@@ -563,7 +621,6 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @SpringBootApplication
@@ -574,23 +631,20 @@ public class $className {
     }
 
     @RestController
-    @RequestMapping("/routes")
-    static class RoutesController {
+    static class AppController {
 
         @GetMapping("/health")
         Map<String, String> health() {
             return Map.of("status", "ok", "service", "$($Context.ProjectName)");
         }
 
-        @PostMapping("/calculate")
-        List<Map<String, Object>> calculate(@RequestBody Map<String, Object> payload) {
-            return List.of(Map.of(
-                "routeId", "demo-route-001",
-                "distanceKm", 120.5,
-                "estimatedMinutes", 140,
-                "estimatedCost", 189.9,
-                "notes", "Placeholder inicial para evolucao do servico de rotas"
-            ));
+        // TODO: implementar logica de negocio aqui
+        @PostMapping("/process")
+        Map<String, Object> process(@RequestBody Map<String, Object> payload) {
+            return Map.of(
+                "status", "ok",
+                "result", Map.of("message", "placeholder - implemente a logica de negocio")
+            );
         }
     }
 }
@@ -644,22 +698,18 @@ function Initialize-AspNetScaffold {
 var builder = WebApplication.CreateBuilder(args);
 var app = builder.Build();
 
-app.MapGet('/health', () => Results.Ok(new { status = 'ok', service = '$($Context.ProjectName)' }));
+app.MapGet("/health", () => Results.Ok(new { status = "ok", service = "$($Context.ProjectName)" }));
 
-app.MapPost('/routes/calculate', (RouteRequest payload) =>
+// TODO: implementar logica de negocio aqui
+app.MapPost("/process", (ProcessRequest payload) =>
 {
-    var response = new[]
-    {
-        new RouteOption('demo-route-001', 120.5, 140, 189.9m, $"Placeholder inicial para rota entre {payload.Origin} e {payload.Destination}.")
-    };
-
-    return Results.Ok(response);
+    return Results.Ok(new ProcessResponse("ok", new { message = "placeholder - implemente a logica de negocio" }));
 });
 
 app.Run();
 
-public record RouteRequest(string Origin, string Destination, string? CargoType, string? Priority, bool AvoidTolls);
-public record RouteOption(string RouteId, double DistanceKm, int EstimatedMinutes, decimal EstimatedCost, string Notes);
+public record ProcessRequest(object? Data);
+public record ProcessResponse(string Status, object Result);
 "@
 
     Set-TextFile -Path (Join-Path $Context.ProjectDir 'appsettings.json') -Content @"
@@ -677,8 +727,8 @@ public record RouteOption(string RouteId, double DistanceKm, int EstimatedMinute
     Set-TextFile -Path (Join-Path $Context.ProjectDir 'Tests\SmokeTests.md') -Content @"
 # Smoke Tests
 
-- GET /health retorna 200
-- POST /routes/calculate retorna payload inicial
+- GET /health retorna 200 com status=ok
+- POST /process retorna 200 com status=ok
 "@
 
     Ensure-GitIgnoreEntries -ProjectDir $Context.ProjectDir -Entries @('bin/', 'obj/', '.vs/')

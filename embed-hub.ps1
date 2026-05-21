@@ -48,6 +48,50 @@ function Write-Log {
     Add-Content -Path $EmbedLog -Value "[$ts][$Level] $Msg" -Encoding UTF8 -ErrorAction SilentlyContinue
 }
 
+# ---------------------------------------------------------------
+# Security scan applied to every text before it is sent to the
+# embedding model — prevents prompt injection from reaching
+# Ollama and from being indexed as trusted knowledge.
+# ---------------------------------------------------------------
+function Test-EmbedTextSecurity {
+    param([string]$Text, [string]$SolutionId = '')
+
+    $findings = [System.Collections.Generic.List[string]]::new()
+
+    $rules = @(
+        @{ P = '(?i)(ignore|disregard|forget|override)\s+(previous|all|above|prior|your|these|any)\s+(instructions?|rules?|constraints?|guidelines?|context|prompts?|directives?)';
+           L = 'PromptInjection: override instructions' }
+        @{ P = '(?i)(you\s+are\s+now\s+a|act\s+as\s+(a\s+|an\s+)?\w+\s+without|pretend\s+(you\s+are|to\s+be))';
+           L = 'PromptInjection: persona override' }
+        @{ P = '(?i)(new\s+instructions?:|updated\s+instructions?:|<\s*system\s*>|<\s*/?\s*instructions?\s*>|\[system\s*prompt\]|\[override\])';
+           L = 'PromptInjection: hidden system tag' }
+        @{ P = '(?i)(jailbreak|bypass\s+(safety|filter|restriction|guardrail|moderation)|DAN\s+mode)';
+           L = 'PromptInjection: jailbreak keyword' }
+        @{ P = '(?i)(from\s+now\s+on\s+you|your\s+(true\s+purpose|real\s+instructions?|new\s+(role|directive)))';
+           L = 'PromptInjection: instruction smuggling' }
+        @{ P = '[\u200b\u200c\u200d\u200e\u200f\u202a-\u202e\ufeff]{3,}';
+           L = 'PromptInjection: invisible Unicode obfuscation' }
+        @{ P = '(?i)\binvoke-expression\s*[\(\$"''`]|\biex\s*[\(\$"''`]';
+           L = 'MaliciousCode: PowerShell eval (iex)' }
+        @{ P = "(?i)(invoke-webrequest|irm|curl|wget)\s+['\"]?https?://\S+['\"]?\s*\|\s*(iex|invoke-expression|bash|sh\b|cmd\b)";
+           L = 'MaliciousCode: download-and-execute' }
+        @{ P = '(?i)(eval|exec)\s*\(\s*(base64|__import__|compile\s*\()';
+           L = 'MaliciousCode: obfuscated execute' }
+    )
+
+    foreach ($rule in $rules) {
+        if ([regex]::IsMatch($Text, $rule.P)) {
+            $findings.Add($rule.L)
+        }
+    }
+
+    return [pscustomobject]@{
+        IsClean  = ($findings.Count -eq 0)
+        Findings = @($findings)
+        Id       = $SolutionId
+    }
+}
+
 function Get-SqliteCmd {
     $cmd = Get-Command sqlite3 -ErrorAction SilentlyContinue
     if ($cmd) { return $cmd.Source }
@@ -194,6 +238,17 @@ foreach ($row in $rowList) {
     $safeContent = if ($content.Length -gt 0) { $content.Substring(0, [Math]::Min(500, $content.Length)) } else { "" }
     $textForEmbed = "$summary $safeContent"
     if ($prompt) { $textForEmbed = "$prompt $textForEmbed" }
+
+    # --- Security check before sending to Ollama ---------------
+    $secCheck = Test-EmbedTextSecurity -Text $textForEmbed -SolutionId $id
+    if (-not $secCheck.IsClean) {
+        $detail = $secCheck.Findings -join ' | '
+        Write-Warn ("SECURITY SKIP [$id]: suspicious content detected — $detail")
+        Write-Log "WARN" "Security skip: id=$id findings=$detail"
+        $erros++
+        continue
+    }
+    # -----------------------------------------------------------
 
     Write-E "[$($done+1)/$($rowList.Count)] $id ..."
 
