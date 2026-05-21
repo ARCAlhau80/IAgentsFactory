@@ -13,6 +13,9 @@
 | 🎯 [COORDINATOR](COORDINATOR.md) | Planejamento, Sequenciamento | Planejar tarefas, sprints |
 | 📊 [OBSERVABILITY](OBSERVABILITY.md) | Logs, Métricas, Tracing | Instrumentar código, debugar produção |
 | 🧠 [KNOWLEDGE](KNOWLEDGE.md) | Memória persistente, Reuso | Buscar/capturar soluções, economizar tokens |
+| 🔨 [BUILD](BUILD.md) | Build, Test, Lint — qualquer stack | Buildar, rodar testes, verificar lint |
+| 📦 [COMMIT](COMMIT.md) | Git staging, conventional commits, push | Commitar, gerar mensagem semântica, push |
+| 🚀 [DEPLOY](DEPLOY.md) | Deploy local/staging/produção, rollback | Subir aplicação, verificar health, reverter |
 
 ---
 
@@ -30,6 +33,9 @@
 | "Já resolvemos algo parecido antes?" | KNOWLEDGE |
 | "Salve essa solução para reuso futuro" | KNOWLEDGE |
 | "Quanto economizamos em tokens?" | KNOWLEDGE |
+| "faz o build", "builda", "roda os testes" | BUILD |
+| "faz o commit", "commita", "gera mensagem de commit" | COMMIT |
+| "faz o deploy", "sobe a aplicação", "rollback" | DEPLOY |
 
 ---
 
@@ -70,4 +76,28 @@
 2. COORDINATOR → Prioriza tarefas
 3. Distribui para agentes (BACKEND, QA, REFACTOR)
 4. COORDINATOR → Acompanha progresso
+```
+
+## 🔄 Workflow: Build → Commit → Deploy
+
+```
+1. BUILD   → Detecta stack, instala deps, compila, testa, lint
+             Gate: 0 erros + 0 testes falhando
+2. COMMIT  → Verifica segredos, staged inteligente, gera
+             mensagem Conventional Commits, commit + push
+3. DEPLOY  → Confirma ambiente alvo, verifica pré-condições,
+             empacota artefato, deploya, health check
+             Rollback documentado se health check falhar
+```
+
+## 🔄 Workflow: Hotfix Emergencial
+
+```
+1. KNOWLEDGE    → Busca soluções similares para o bug
+2. BACKEND      → Implementa correção
+3. QA           → Cria teste de regressão
+4. BUILD        → Valida build + testes (gate obrigatório)
+5. COMMIT       → Commit com tipo "fix:" + push
+6. DEPLOY       → Deploy direto em produção com confirmação
+7. OBSERVABILITY→ Monitora logs e métricas pós-deploy
 ```

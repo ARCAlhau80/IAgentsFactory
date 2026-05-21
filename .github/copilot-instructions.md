@@ -91,6 +91,9 @@ FLUXO OBRIGATÓRIO (sem exceção):
 | 🎯 **COORDINATOR** | Planejamento, Sequenciamento | Planejar sprint/tarefas |
 | 📊 **OBSERVABILITY** | Logs, Métricas, Tracing | Instrumentar código, debugar produção |
 | 🧠 **KNOWLEDGE** | Memória persistente, Reuso | Buscar/capturar soluções, economizar tokens |
+| 🔨 **BUILD** | Build, Test, Lint — detecção automática de stack | "faz o build", "roda os testes", verificação pré-deploy |
+| 📦 **COMMIT** | Git staging, conventional commits, push seguro | "faz o commit", "commita", "gera mensagem de commit" |
+| 🚀 **DEPLOY** | Deploy local/staging/produção, health check, rollback | "faz o deploy", "sobe", "rollback" |
 
 ---
 
