@@ -795,6 +795,387 @@ function Initialize-ProjectScaffold {
     }
 }
 
+# ==============================================================
+# MULTI-AGENT ORCHESTRATION
+# Gera contexto especifico por agente + plano de paralelismo
+# e vincula aprendizados ao Knowledge Hub.
+# ==============================================================
+
+function Get-BackendAgentContext {
+    param($Stack, $Context)
+    switch ($Stack.Key) {
+        'fastapi' {
+return @"
+- Framework: FastAPI (Python)
+- Entrada/Saida: Pydantic BaseModel (InputPayload / OutputPayload)
+- Endpoint padrao: POST /process
+- Service layer: src/$($Context.ProjectName.ToLower())/service.py
+- Async: usar async/await para qualquer I/O
+- Validacao: Pydantic v2 com field_validator
+- Run: $($Context.RunCmd)
+"@
+        }
+        'express' {
+return @"
+- Framework: Express.js (Node.js/TypeScript)
+- Estrutura: src/routes/, src/services/, src/middlewares/
+- Endpoint padrao: POST /process — validar req.body antes de processar
+- Async: async/await + try/catch em todas as rotas
+- Validacao: Joi ou Zod
+- Run: $($Context.RunCmd)
+"@
+        }
+        'spring-boot' {
+return @"
+- Framework: Spring Boot (Java)
+- Estrutura: controller/ service/ repository/ dto/
+- Endpoint padrao: POST /process com @RequestBody InputPayload DTO
+- Anotacoes: @RestController @Service @Repository @Valid
+- Bean Validation: @NotNull @NotBlank @Size
+- Run: $($Context.RunCmd)
+"@
+        }
+        'aspnet' {
+return @"
+- Framework: ASP.NET Core (C#)
+- Estrutura: Controllers/ Services/ Models/ DTOs/
+- Endpoint padrao: [HttpPost("process")] async Task<IActionResult>
+- Async: async/await + CancellationToken
+- Validacao: Data Annotations ou FluentValidation
+- Run: $($Context.RunCmd)
+"@
+        }
+        default {
+return @"
+- Stack: $($Stack.Label)
+- Linguagem: $($Stack.Language) | Framework: $($Stack.Framework)
+- Estrutura: service/ controller/ model/
+- Run: $($Context.RunCmd)
+"@
+        }
+    }
+}
+
+function Get-QaAgentContext {
+    param($Stack, $Context)
+    switch ($Stack.Key) {
+        'fastapi' {
+return @"
+- Framework de teste: pytest + pytest-asyncio
+- Pasta: tests/
+- Comando: $($Context.TestCmd)
+- Client: httpx.AsyncClient(app=app) para testes de endpoint
+- Cobertura: pytest-cov (meta >= 80%)
+- Focar: InputPayload invalido, OutputPayload correto, service logic
+"@
+        }
+        'express' {
+return @"
+- Framework de teste: Jest + Supertest
+- Pasta: tests/ ou __tests__/
+- Comando: $($Context.TestCmd)
+- Mock: jest.mock() para servicos externos
+- Focar: POST /process com payloads validos e invalidos, middlewares
+"@
+        }
+        'spring-boot' {
+return @"
+- Framework de teste: JUnit 5 + Mockito
+- Pasta: src/test/java/
+- Comando: $($Context.TestCmd)
+- Anotacoes: @SpringBootTest @MockBean @WebMvcTest MockMvc
+- Focar: service unit tests + controller integration tests
+"@
+        }
+        'aspnet' {
+return @"
+- Framework de teste: xUnit + Moq
+- Pasta: tests/ ou ProjectName.Tests/
+- Comando: $($Context.TestCmd)
+- Usar: WebApplicationFactory<Program> para integration tests
+- Focar: controllers, services, model validation
+"@
+        }
+        default {
+return @"
+- Definir framework de teste para: $($Stack.Language)
+- Pasta: tests/
+- Comando: $($Context.TestCmd)
+- Cobertura minima: 80% para logica de negocio
+"@
+        }
+    }
+}
+
+function Get-BuildAgentContext {
+    param($Stack, $Context)
+return @"
+- Stack detectada: $($Stack.Label)
+- Linguagem: $($Stack.Language) | Framework: $($Stack.Framework)
+- Comando de build: $($Context.BuildCmd)
+- Comando de test: $($Context.TestCmd)
+- GATE obrigatorio: 0 erros de compilacao + 0 falhas de teste
+- Lint: verificar antes do commit
+"@
+}
+
+function Get-DeployAgentContext {
+    param($Stack, $Context)
+return @"
+- Stack: $($Stack.Label) | Linguagem: $($Stack.Language)
+- Comando run (local/dev): $($Context.RunCmd)
+- Pre-condicao: BUILD passou + git status clean + env vars verificados
+- Health check: GET /health ou verificacao de processo apos start
+- Rollback: documentar procedimento antes de cada deploy em producao
+"@
+}
+
+function Initialize-MultiAgentSession {
+    param($Context)
+
+    $githubDir = Join-Path $Context.ProjectDir '.github'
+    Ensure-Directory $githubDir
+
+    $stack    = $Context.StackProfile
+    $lang     = $stack.Language
+    $fw       = $stack.Framework
+    $label    = $stack.Label
+    $arch     = $Context.Architecture
+    $patterns = $Context.Patterns -join ', '
+    $name     = $Context.ProjectName
+    $ptype    = $Context.ProjectType
+    $build    = $Context.BuildCmd
+    $test     = $Context.TestCmd
+    $run      = $Context.RunCmd
+
+    $backendCtx  = Get-BackendAgentContext  -Stack $stack -Context $Context
+    $qaCtx       = Get-QaAgentContext       -Stack $stack -Context $Context
+    $buildCtx    = Get-BuildAgentContext    -Stack $stack -Context $Context
+    $deployCtx   = Get-DeployAgentContext   -Stack $stack -Context $Context
+
+    # --- .github/copilot-instructions.md gerado no projeto ----
+    $instructions = @"
+# Copilot Instructions — $name
+
+> Gerado automaticamente pela IAgentsFactory em $(Get-Date -Format 'yyyy-MM-dd').
+> Multi-agent session ATIVA POR PADRAO. Tarefas independentes rodam em paralelo.
+
+---
+
+## Stack deste projeto
+
+| Item       | Valor             |
+|------------|-------------------|
+| Linguagem  | $lang             |
+| Framework  | $fw               |
+| Arquitetura| $arch             |
+| Patterns   | $patterns         |
+| Build      | $build            |
+| Test       | $test             |
+| Run        | $run              |
+
+---
+
+## Fluxo de orquestracao paralela
+
+```
+[FASE 1] SEQUENCIAL
+  KNOWLEDGE → busca no Hub por: "$ptype $lang $fw"
+
+[FASE 2] PARALELO (iniciar simultaneamente)
+  ├── ARCHITECT    → validar design de $arch para $fw
+  ├── QA           → plano de testes ($test)
+  └── OBSERVABILITY → estrategia de logs/metricas ($lang)
+
+[FASE 3] SEQUENCIAL (aguarda FASE 2)
+  BACKEND → implementa slice com contexto de ARCHITECT + KNOWLEDGE
+
+[FASE 4] PARALELO
+  ├── QA      → gera testes unitarios
+  └── REFACTOR → analisa code smells
+
+[FASE 5] SEQUENCIAL — gate obrigatorio
+  BUILD  → $build && $test
+  COMMIT → commit semantico (Conventional Commits)
+  DEPLOY → local/dev + health check
+```
+
+---
+
+## Contexto por agente
+
+### ARCHITECT
+- Validar: $arch — separacao de camadas, DI, DTOs, sem logica no controller
+- Patterns esperados: $patterns
+- Stack: $label
+
+### BACKEND
+$backendCtx
+### QA
+$qaCtx
+### BUILD
+$buildCtx
+### DEPLOY
+$deployCtx
+### KNOWLEDGE
+- Query inicial: ``$ptype $lang $fw $arch``
+- Tag de projeto: ``$name``
+- Capturar solucoes novas: ``.\capture-pipeline.ps1 -FromFile <arquivo.solution.md> -Project "$name"``
+
+---
+
+## Regras da sessao
+
+1. BUILD deve passar (0 erros + 0 falhas) ANTES de COMMIT
+2. Segredos NUNCA hardcoded — usar variaveis de ambiente
+3. Todo novo padrao descoberto deve ser capturado no Hub com -Project "$name"
+4. Logs estruturados obrigatorios — sem print/console.log direto em producao
+5. KNOWLEDGE sempre primeiro — consultar Hub antes de gerar codigo novo
+"@
+
+    Set-TextFile -Path (Join-Path $githubDir 'copilot-instructions.md') -Content $instructions
+
+    # --- specs/agent-session.md --------------------------------
+    $specsDir = Join-Path $Context.ProjectDir 'specs'
+    Ensure-Directory $specsDir
+
+    $session = @"
+# Agent Session Plan — $name
+
+**Criado em:** $(Get-Date -Format 'yyyy-MM-dd HH:mm')
+**Stack:** $label
+**Arquitetura:** $arch
+**Tipo:** $ptype
+
+---
+
+## Tarefas e paralelismo — Sprint inicial
+
+| # | Agente       | Tarefa                                    | Depende de | Paralelo com |
+|---|--------------|-------------------------------------------|------------|--------------|
+| 1 | KNOWLEDGE    | Busca no Hub: ``$ptype $fw``              | —          | —            |
+| 2 | ARCHITECT    | Valida design $arch / $fw                 | 1          | 3, 4         |
+| 3 | QA           | Plano de testes ($test)                   | 1          | 2, 4         |
+| 4 | OBSERVABILITY| Estrategia logs/metricas ($lang)          | 1          | 2, 3         |
+| 5 | BACKEND      | Implementa primeiro slice                 | 2          | —            |
+| 6 | QA           | Gera testes unitarios                     | 5          | 7            |
+| 7 | REFACTOR     | Analisa code smells                       | 5          | 6            |
+| 8 | BUILD        | Executa: $build && $test                  | 5, 6       | —            |
+| 9 | COMMIT       | Commit semantico                          | 8          | —            |
+|10 | DEPLOY       | Deploy local/dev + health check           | 9          | —            |
+
+---
+
+## Hub queries por agente
+
+| Agente       | Query sugerida                                      |
+|--------------|-----------------------------------------------------|
+| KNOWLEDGE    | ``$ptype $lang $fw $arch``                          |
+| BACKEND      | ``$fw service pattern $lang``                       |
+| QA           | ``$fw test $lang unit integration``                 |
+| BUILD        | ``$lang build $fw ci pipeline``                     |
+| DEPLOY       | ``$lang $fw deploy docker health``                  |
+| OBSERVABILITY| ``$lang logging metrics $fw``                       |
+
+---
+
+## Captura de aprendizados no Hub
+
+Ao concluir qualquer tarefa relevante, registre a solucao:
+
+``````powershell
+# IAgentsFactory — capture-pipeline
+.\capture-pipeline.ps1 -FromFile "caminho\solucao.solution.md" -Project "$name"
+``````
+
+O parametro -Project "$name" vincula o aprendizado a este projeto.
+Futuras buscas no Hub retornarao esta solucao com contexto de origem.
+"@
+
+    Set-TextFile -Path (Join-Path $specsDir 'agent-session.md') -Content $session
+
+    Write-Host ''
+    Write-Host '  =========================================================' -ForegroundColor DarkGreen
+    Write-Host '  MULTI-AGENT SESSION INICIADA' -ForegroundColor Green
+    Write-Host '  =========================================================' -ForegroundColor DarkGreen
+    Write-Host ("  Stack: {0}" -f $label) -ForegroundColor White
+    Write-Host ("  Arquitetura: {0}" -f $arch) -ForegroundColor White
+    Write-Host '  Tarefas paralelas: ARCHITECT + QA + OBSERVABILITY (FASE 2)' -ForegroundColor White
+    Write-Host '                     QA + REFACTOR (FASE 4)' -ForegroundColor White
+    Write-Host '  Plano completo  : specs/agent-session.md' -ForegroundColor White
+    Write-Host '  Contexto agentes: .github/copilot-instructions.md' -ForegroundColor White
+    Write-Host '  Hub vinculado   : capture-pipeline.ps1 -Project "' + $name + '"' -ForegroundColor White
+    Write-Host '  =========================================================' -ForegroundColor DarkGreen
+}
+
+function Register-ProjectInHub {
+    param($Context)
+
+    # Seed do Hub com o contexto do projeto recém-criado.
+    # Cria um arquivo .solution.md temporario e o ingere para garantir
+    # que buscas futuras encontrem este projeto por tipo/stack/problema.
+
+    $tmpDir = Join-Path $env:TEMP "iagents-seed"
+    if (-not (Test-Path $tmpDir)) { New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null }
+
+    $slug    = $Context.ProjectName -replace '[^a-zA-Z0-9_-]', '-'
+    $tmpFile = Join-Path $tmpDir "$slug-bootstrap.solution.md"
+
+    $content = @"
+---
+domain: project-bootstrap
+pattern: $($Context.ProjectType)-$($Context.StackProfile.Key)
+language: $($Context.StackProfile.Language)
+framework: $($Context.StackProfile.Framework)
+agent: COORDINATOR
+quality: 3
+tags: [$($Context.ProjectType), $($Context.StackProfile.Key), factory-bootstrap]
+---
+
+## Context
+
+Projeto **$($Context.ProjectName)** bootstrapado pela IAgentsFactory.
+
+- Tipo: $($Context.ProjectType)
+- Stack: $($Context.StackProfile.Label)
+- Arquitetura: $($Context.Architecture)
+- Patterns: $($Context.Patterns -join ', ')
+
+Problema: $($Context.ProblemStatement)
+Entrada: $($Context.InputDescription)
+Saida: $($Context.OutputDescription)
+
+## Solution
+
+Bootstrap completo gerado com:
+- Scaffold tecnico ($($Context.StackProfile.Key))
+- Docs iniciais (README + project-intake.md)
+- SPEC workflow inicializado
+- Multi-agent session configurada (specs/agent-session.md)
+- Instrucoes de agente (.github/copilot-instructions.md)
+
+Comandos:
+- Build: $($Context.BuildCmd)
+- Test:  $($Context.TestCmd)
+- Run:   $($Context.RunCmd)
+
+Para capturar aprendizados futuros deste projeto:
+  .\capture-pipeline.ps1 -FromFile <arquivo.solution.md> -Project "$($Context.ProjectName)"
+"@
+
+    try {
+        Set-Content -Path $tmpFile -Value $content -Encoding UTF8
+        $captureScript = Join-Path $FactoryRoot 'capture-pipeline.ps1'
+        if (Test-Path $captureScript) {
+            & $captureScript -FromFile $tmpFile -Project $Context.ProjectName 2>$null
+        }
+    } catch {
+        # nao bloqueia o bootstrap se o hub nao estiver disponivel
+    } finally {
+        if (Test-Path $tmpFile) { Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue }
+    }
+}
+
 function New-ProjectContextDocs {
     param($Context)
 
@@ -1026,6 +1407,12 @@ try {
 
 Write-Title 'Consolidando docs iniciais'
 New-ProjectContextDocs -Context $context
+
+Write-Title 'Iniciando sessao multi-agente'
+Initialize-MultiAgentSession -Context $context
+
+Write-Title 'Registrando projeto no Knowledge Hub'
+Register-ProjectInHub -Context $context
 
 Write-Title 'Inicializando workflow SPEC'
 Invoke-FactoryWorkflow -Context $context

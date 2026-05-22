@@ -13,10 +13,16 @@ param(
     [string]$FromFile,
     [switch]$FromGit,
     [string]$Batch,
-    [string]$Project = "",
+    [string]$Project      = "",
+    [string]$ProjectTag   = "",   # alias para -Project; usado pelo new-project.ps1
     [switch]$DryRun,
     [switch]$VerboseLog
 )
+
+# Consolidar ProjectTag em Project para uso interno
+if ([string]::IsNullOrWhiteSpace($Project) -and -not [string]::IsNullOrWhiteSpace($ProjectTag)) {
+    $Project = $ProjectTag
+}
 
 try {
     $utf8 = New-Object System.Text.UTF8Encoding($false)
@@ -342,6 +348,11 @@ SELECT changes();
 
     Update-CaptureLog -Id $id -Domain $SolutionData.domain -Pattern $SolutionData.pattern -Hash $hash
     Write-Pipeline ("Captured: {0}/{1} [ID: {2}]" -f $SolutionData.domain, $SolutionData.pattern, $id)
+
+    # Cross-project learning feedback
+    if (-not [string]::IsNullOrWhiteSpace($Project)) {
+        Write-Host ("  [HUB] Solucao vinculada ao projeto: {0} — disponivel para reuso em todos os projetos futuros." -f $Project) -ForegroundColor DarkCyan
+    }
 }
 
 function Import-FromFile {
